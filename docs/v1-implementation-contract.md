@@ -33,6 +33,10 @@ The v1 validation slice is:
 - Maintenance, billing, facility booking, visitor QR, documents, contacts, full
   incident case management, full custom role builder, staff self-service password
   reset, and Technician role are out of v1 unless a pilot explicitly reopens scope.
+- v1 does not define billing tables, billing permissions, billing Edge Functions,
+  invoice lifecycle, payment flow, accounting rules, or payment gateway behavior.
+  Rent, water, and electricity LINE notifications are post-v1 and require a
+  separate billing contract before implementation.
 
 ## Data Model Contract
 
@@ -380,6 +384,9 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
   maintenance ships, and small announcements under 20 recipients.
 - Use multicast for normal/broadcast announcements with 20 or more recipients,
   batch max 500 recipients.
+- In v1, the notification worker supports Parcel and Announcement notification
+  jobs. Billing notification jobs for rent, water, electricity, due-date
+  reminders, and overdue reminders are outside v1.
 - Do not use LINE broadcast in SaaS v1; all recipients come from platform snapshots.
 - Shared OA messages must include Condo context in the message text.
 - Critical notifications may bypass Condo soft limits but never provider limits,

@@ -108,6 +108,7 @@ Stack ที่กำหนดไว้สำหรับ v1:
 
 - Maintenance requests
 - Billing
+- Billing / Utility Bills LINE notifications สำหรับค่าเช่า ค่าน้ำ ค่าไฟ
 - Facility booking
 - Visitor QR
 - Documents
@@ -127,11 +128,21 @@ Stack ที่กำหนดไว้สำหรับ v1:
 - LIFF frontend ไม่ query customer-data table โดยตรง แต่เรียก Edge Functions/RPC ที่ verify LIFF identity ฝั่ง server
 - Critical notification ต้องมี reason, scope confirmation, audit record และ rate/quota guardrail
 
+## Post-v1 Roadmap
+
+### Billing / Utility Bills
+
+- แจ้งเตือนออกบิลค่าเช่า ค่าน้ำ และค่าไฟผ่าน LINE
+- แจ้งเตือนก่อนครบกำหนดชำระและแจ้งเตือนค้างชำระ
+- ให้ผู้เช่าเปิด LIFF เพื่อดูรายละเอียดยอด สถานะบิล และประวัติการแจ้งเตือน
+- ใช้ LINE notification queue, LINE Binding, และ LIFF access pattern เดิมเป็นฐาน แต่ยังไม่กำหนด schema, payment flow, invoice lifecycle, accounting rules, หรือ payment gateway ใน v1
+
 ## Documentation
 
 - [Context Glossary](CONTEXT.md): glossary และ domain language ของระบบ
 - [Condo SaaS + LINE LIFF Plan](docs/condo-saas-line-liff-plan-v6.1.md): product/architecture overview
 - [v1 Implementation Contract](docs/v1-implementation-contract.md): source of truth สำหรับ data model, RLS, Edge Functions, storage, queue, import, audit และ tests
+- [Deployment Flow](docs/deployment-flow.md): Cloudflare Pages, Supabase, LINE, environment promotion, verification และ rollback contract สำหรับ v1
 - [ADR 0001](docs/adr/0001-support-shared-and-custom-line-oa.md): shared/custom LINE OA strategy
 - [ADR 0002](docs/adr/0002-use-line-multicast-for-large-announcements.md): multicast strategy สำหรับ announcement ขนาดใหญ่
 - [ADR 0003](docs/adr/0003-resident-liff-access-through-edge-functions.md): LIFF access ผ่าน Edge Functions
@@ -139,4 +150,3 @@ Stack ที่กำหนดไว้สำหรับ v1:
 ## Repository Status
 
 ตอนนี้ repo นี้เป็น documentation/specification repository สำหรับวางแผนและล็อก contract ของระบบก่อน implementation
-

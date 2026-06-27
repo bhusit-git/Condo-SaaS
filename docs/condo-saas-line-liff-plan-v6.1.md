@@ -145,11 +145,13 @@ audit, and acceptance tests.
 - Custom LINE OA is schema-ready in v1 but productized in phase 2. v1 has no custom OA admin configuration UI, migration UI, or re-bind flow.
 - CSV is the only bulk import format in v1.
 - Maintenance, billing, facility booking, visitor QR, documents, full incident case management, contacts, full custom role builder, staff self-service password reset, and Technician role are post-v1 unless pilot demands them.
+- Billing / Utility Bills LINE notifications for rent charges, water charges, electricity charges, due-date reminders, and overdue reminders are post-v1. They should reuse the v1 LINE notification queue, LINE Binding, and LIFF access patterns, but require a separate billing contract before implementation.
 
 ## Related Docs
 
 - [Domain glossary](../CONTEXT.md)
 - [v1 Implementation Contract](v1-implementation-contract.md)
+- [Deployment Flow](deployment-flow.md)
 - [ADR 0001: Support shared and custom LINE Official Accounts](adr/0001-support-shared-and-custom-line-oa.md)
 - [ADR 0002: Use LINE multicast for large announcement notifications](adr/0002-use-line-multicast-for-large-announcements.md)
 - [ADR 0003: Resident LIFF access goes through Edge Functions](adr/0003-resident-liff-access-through-edge-functions.md)

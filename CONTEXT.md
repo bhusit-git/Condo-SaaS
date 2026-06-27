@@ -62,6 +62,24 @@ Publishing an Announcement and notifying residents by LINE are separate choices.
 
 Large Announcement notifications may use LINE multicast delivery. Multicast success means LINE accepted the batch, not that every recipient definitely received the message.
 
+## Billing Notification
+
+A future LINE notification for rent charges, utility bills, due-date reminders, or overdue reminders.
+
+Billing Notifications are post-v1. They are expected to reuse the platform notification queue, LINE Binding, and LIFF access pattern, but they are not committed v1 behavior.
+
+## Rent Charge
+
+A future billing-domain charge for rent owed by a tenant or responsible Resident relationship.
+
+Rent Charges are post-v1 and do not define v1 tables, permissions, invoice lifecycle, payment flow, accounting rules, or payment gateway behavior.
+
+## Utility Bill
+
+A future billing-domain bill for utilities such as water or electricity.
+
+Utility Bills are post-v1 and may later notify residents through LINE when issued, near due date, or overdue.
+
 ## Custom LINE OA
 
 A Condo-specific LINE Official Account connected to the platform.
