@@ -13,6 +13,10 @@ v1 uses one Cloudflare Pages project for the three React Vite app entrypoints:
 - `/staff`
 - `/liff`
 
+The Super Admin control plane lives at `/admin/platform` inside the admin app for
+v1. It does not create a fourth frontend entrypoint or a separate Pages project
+until platform release ownership, isolation, or traffic requires that split.
+
 The apps remain separate Vite frontends inside the workspace, but they are built
 and published under one Pages site for v1. This keeps the public URL, Supabase
 redirect configuration, LIFF endpoint, and release version aligned during the
@@ -119,7 +123,7 @@ Edge Functions:
   expanded schema.
 - Required functions include the v1 contract functions such as
   `line_webhook_ingest`, `notification_worker_tick`, parcel workflows, import
-  workflows, LIFF workflows, and announcement workflows.
+  workflows, LIFF workflows, announcement workflows, and platform owner workflows.
 
 Bootstrap:
 
@@ -127,17 +131,25 @@ Bootstrap:
 - Seed or verify Shared Platform LINE channel references, protected preset
   permission defaults, quota defaults, required Storage buckets, and scheduled
   worker configuration.
+- Seed or verify platform owner grant/revocation metadata needed to reject stale
+  Super Admin tokens after access is removed.
 - It must be safe to run bootstrap repeatedly in staging and production.
 
 Scheduled workers:
 
 - `notification_worker_tick` scheduling is managed by CI/bootstrap.
+- `platform_aggregate_usage_tick` scheduling is managed by CI/bootstrap and
+  writes delayed usage snapshots. It must not be replaced by per-row database
+  triggers on high-volume operational tables.
 - Do not rely on manual dashboard setup as the only record of worker scheduling.
 
 ## Frontend Deployment
 
 Cloudflare Pages hosts one site with route entrypoints for `/admin`, `/staff`,
 and `/liff`.
+
+`/admin/platform` is served by the `/admin` app and protected by platform
+authorization checks. Route visibility is not a security boundary.
 
 The deployment must support SPA fallback per app route, for example:
 
@@ -182,9 +194,12 @@ Minimum checks:
 - Required Edge Functions respond to safe health or no-op checks.
 - LINE webhook endpoint is reachable for the active environment.
 - `notification_worker_tick` schedule exists.
+- `platform_aggregate_usage_tick` schedule exists.
 - Storage buckets required by the v1 contract exist.
 - Staging can run a safe notification queue or worker smoke check without sending
   to production residents.
+- Staging can verify that a non-platform user cannot access `/admin/platform` or
+  platform owner functions.
 
 Manual QA may still happen after automated checks, but command success alone is
 not enough to declare the deployment healthy.
@@ -203,4 +218,3 @@ Rollback favors application rollback and database forward-fix.
 This policy depends on backward-compatible migrations. If a release needs a
 destructive schema change, split it into multiple releases with an explicit
 expand, migrate, and contract sequence.
-

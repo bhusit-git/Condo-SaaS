@@ -87,6 +87,7 @@ Stack ที่กำหนดไว้สำหรับ v1:
 - **Resident App**: LINE LIFF
 - **Messaging**: LINE Messaging API
 - **Queue**: Postgres queue tables + scheduled Edge Function worker
+- **Platform Owner**: `/admin/platform` สำหรับ Super Admin ภายใน admin app เดิม
 
 แนวคิดสำคัญคือ route เป็นเพียง UX convention เท่านั้น ส่วน security boundary จริงอยู่ที่ Supabase RLS, Edge Functions/RPC และ permission checks ฝั่ง server
 
@@ -102,12 +103,15 @@ Stack ที่กำหนดไว้สำหรับ v1:
 - Announcements
 - LINE notification queue และ delivery tracking
 - Staff preset roles และ permission toggles
+- Super Admin control plane แบบ minimal สำหรับเจ้าของแพลตฟอร์ม:
+  subscription state, suspend/reactivate tenant, delayed usage metrics
 - Audit events สำหรับ action สำคัญ
 
 ยังไม่อยู่ใน v1:
 
 - Maintenance requests
-- Billing
+- Resident billing, rent charge, water/electricity bills, invoice lifecycle,
+  payment collection, accounting rules, และ payment gateway
 - Billing / Utility Bills LINE notifications สำหรับค่าเช่า ค่าน้ำ ค่าไฟ
 - Facility booking
 - Visitor QR
@@ -125,6 +129,11 @@ Stack ที่กำหนดไว้สำหรับ v1:
 - Unit Resident คือความสัมพันธ์ระหว่าง resident กับห้อง เช่น owner, tenant, family
 - v1 ใช้ Shared Platform LINE OA เพื่อให้ pilot เริ่มเร็ว
 - Custom LINE OA เตรียม schema ไว้ แต่เป็น phase 2
+- Super Admin ใช้ Supabase Auth custom claim
+  `app_metadata.role = "platform_super_admin"` และอยู่ที่ `/admin/platform`
+- Subscription status ของเจ้าของ SaaS แยกจาก resident billing; runtime
+  suspend ใช้ flag บน Organization/Condo ไม่ join subscription history ทุก write
+- Usage metrics เป็น hourly/daily aggregate ไม่ใช่ realtime trigger counter
 - LIFF frontend ไม่ query customer-data table โดยตรง แต่เรียก Edge Functions/RPC ที่ verify LIFF identity ฝั่ง server
 - Critical notification ต้องมี reason, scope confirmation, audit record และ rate/quota guardrail
 
