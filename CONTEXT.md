@@ -12,6 +12,40 @@ A condo project managed within an Organization.
 
 A Condo has its own buildings, floors, units, residents, staff scope, and operational configuration.
 
+## Platform Super Admin
+
+The SaaS owner operator who can manage tenant access, subscription state, and
+global usage metrics across Organizations and Condos.
+
+Platform Super Admin is not a Condo Admin role. It is authorized through a
+platform-level Supabase Auth claim and service-role controlled grant/revocation
+flow.
+
+In v1, the Platform Super Admin surface lives at `/admin/platform` inside the
+admin app. Route visibility is only UX; Edge Functions and RLS helpers enforce
+the boundary.
+
+## Platform Subscription
+
+The SaaS relationship between the platform owner and an Organization or Condo.
+
+Platform Subscription controls whether a tenant may continue using the product.
+It is separate from resident rent, water, electricity, invoices, payment
+collection, and accounting workflows.
+
+Subscription history is recorded separately from the runtime access flag used for
+authorization. Operational writes check Organization/Condo platform access flags,
+not subscription history joins.
+
+## Platform Usage Metric
+
+A delayed owner-facing snapshot of usage such as active condos, active residents,
+LINE bindings, notification jobs, deliveries, and message counts.
+
+Platform Usage Metrics are produced by scheduled aggregate jobs from source
+tables. They are not updated by per-row realtime triggers during parcel,
+announcement, or LINE delivery workflows.
+
 ## Shared Platform LINE OA
 
 The platform-owned LINE Official Account used by multiple Condos.
@@ -80,6 +114,43 @@ A future billing-domain bill for utilities such as water or electricity.
 
 Utility Bills are post-v1 and may later notify residents through LINE when issued, near due date, or overdue.
 
+## Lease Agreement
+
+A tenant contract history record for a specific tenant Unit Resident.
+
+Lease Agreements are tied to `tenant_unit_resident_id`, not only to Resident
+identity, because the same Resident may be a tenant of multiple Units or may have
+multiple historical tenant periods.
+
+In v1, a Unit may have at most one active tenant Lease Agreement. Shared leases
+with multiple tenant participants are deferred until a later version.
+
+`ends_at` records the contract date for staff review. It does not automatically
+revoke LINE or LIFF access in v1.
+
+Staff must explicitly close the lease or confirm move-out through a backend
+function before tenant access is revoked.
+
+Lease contract files are limited operational evidence files in v1. They are not
+the full Documents module.
+
+## Move-In / Move-Out Checklist
+
+A staff-reviewed operational checklist used when a tenant leaves a Unit and
+another tenant may move in.
+
+The checklist records status-only evidence for items such as utility clearance,
+deposit resolution, room damage review, notes, confirming staff, timestamps, and
+evidence files.
+
+Move-out checklist statuses are not rent, utility bills, invoices, payment
+collection, or accounting records.
+
+Closing move-out ends the tenant Lease Agreement, ends the tenant Unit Resident,
+revokes the tenant LINE Binding, and writes audit in one backend transaction.
+
+Owner and family Unit Resident access is not revoked by tenant move-out.
+
 ## Custom LINE OA
 
 A Condo-specific LINE Official Account connected to the platform.
@@ -140,6 +211,10 @@ Every automatic LINE Binding records audit evidence explaining which fields matc
 
 In v1, automatic LINE Binding requires a unit match and exactly one normalized phone match among active Unit Residents for that Unit. Name-only matches are sent to review.
 
+Tenant LINE Binding is blocked when the Unit still has an active tenant lease or
+an active previous tenant Unit Resident that has not been closed through the
+move-out workflow.
+
 Phone numbers are normalized before matching so local and international Thai phone formats compare consistently.
 
 If no active Unit Resident exists for the unit, the binding is rejected. If multiple active candidates match the phone, the binding is sent to review as ambiguous data.
@@ -170,7 +245,14 @@ The relationship between a Resident and a Unit.
 
 Unit Residents express the resident's role for that unit, such as owner, tenant, or family member, and determine which units the Resident can access.
 
-In v1, active Unit Residents can use the core resident workflows for their unit regardless of whether they are owners, tenants, or family members.
+In v1, active Unit Residents can use the core resident workflows for their unit
+regardless of whether they are owners, tenants, or family members, except that
+tenant access may also require an active Lease Agreement after lease-gated access
+is enabled for that Condo.
+
+Resident imports create Unit Residents but do not create Lease Agreements in v1.
+Existing imported tenants keep the active Unit Resident access behavior until
+staff backfills leases and enables the lease workflow for that Condo.
 
 When a Resident has access to multiple Condos or Units, the resident app asks them to choose the Condo and Unit context before starting unit-scoped workflows.
 

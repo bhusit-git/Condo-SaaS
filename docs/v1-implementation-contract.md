@@ -30,13 +30,24 @@ The v1 validation slice is:
   not query customer-data tables directly from the frontend in v1.
 - Notification queue: Postgres-backed queue tables processed by a scheduled Edge
   Function worker.
-- Maintenance, billing, facility booking, visitor QR, documents, contacts, full
-  incident case management, full custom role builder, staff self-service password
-  reset, and Technician role are out of v1 unless a pilot explicitly reopens scope.
-- v1 does not define billing tables, billing permissions, billing Edge Functions,
-  invoice lifecycle, payment flow, accounting rules, or payment gateway behavior.
-  Rent, water, and electricity LINE notifications are post-v1 and require a
-  separate billing contract before implementation.
+- Platform control plane: v1 includes a minimal owner-only area under
+  `/admin/platform` for tenant access status, subscription state, and delayed
+  usage metrics. It does not add a separate frontend entrypoint in v1.
+- Maintenance, resident billing, facility booking, visitor QR, documents,
+  contacts, full incident case management, full custom role builder, staff
+  self-service password reset, and Technician role are out of v1 unless a pilot
+  explicitly reopens scope.
+- v1 does not define resident billing tables, resident billing permissions,
+  resident billing Edge Functions, invoice lifecycle, payment flow, accounting
+  rules, or payment gateway behavior. Rent, water, and electricity LINE
+  notifications are post-v1 and require a separate billing contract before
+  implementation.
+- Platform subscription management is only for the SaaS owner controlling whether
+  an Organization or Condo may keep using the product. It must not be reused for
+  resident rent, water, electricity, payment collection, or accounting workflows.
+- Lease contract files and move-out checklist evidence in v1 are limited
+  operational evidence files for tenant turnover. They are not the full Documents
+  module and do not create a resident billing ledger.
 
 ## Data Model Contract
 
@@ -46,13 +57,31 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 
 ### Tenant And Setup Tables
 
-- `organizations`: `id`, `name`, `status`.
+- `organizations`: `id`, `name`, `status`, `platform_access_status`.
   - Unique: normalized active organization name only if business requires it.
+  - `platform_access_status` values: `allowed`, `suspended`, `cancelled`.
+  - `platform_access_status` is the runtime access flag used by RLS helpers and
+    Edge Functions. It is not the subscription history.
 - `condos`: `id`, `organization_id`, `name`, `status`, `line_mode`,
-  `shared_line_channel_id`, `active_at`.
+  `shared_line_channel_id`, `active_at`, `platform_access_status`.
   - `status` values: `setup`, `active`, `inactive`.
+  - `status` is onboarding/lifecycle state only; do not add subscription states
+    such as `suspended` to it.
+  - `platform_access_status` values: `allowed`, `suspended`, `cancelled`.
+  - Effective Condo access is allowed only when both the Organization and Condo
+    platform access statuses are `allowed`.
   - `line_mode` values: `shared`, `custom_pending`, `custom`.
   - v1 creates `shared`; `custom_*` exists for future compatibility only.
+- `tenant_subscriptions`: `id`, `organization_id`, `condo_id`, `status`,
+  `plan_code`, `billing_period_start`, `billing_period_end`, `trial_ends_at`,
+  `suspend_reason`, `cancelled_at`.
+  - `condo_id` is nullable only when the subscription applies to the whole
+    Organization.
+  - `status` values: `trialing`, `active`, `past_due`, `suspended`, `cancelled`.
+  - This table records business state and history for the SaaS owner. RLS
+    policies and high-frequency operational writes must not join this table.
+  - Suspend/reactivate/cancel operations update `tenant_subscriptions` and the
+    relevant `platform_access_status` flag in the same transaction and write audit.
 - `condo_notification_settings`: `id`, `organization_id`, `condo_id`,
   `parcel_line_recipient_policy`, `critical_fallback_enabled`,
   `critical_soft_limit_bypass_enabled`.
@@ -83,6 +112,31 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   `resident_id`, `resident_role`, `status`, `starts_at`, `ends_at`.
   - Active means `status = active` and `ends_at is null`.
   - `resident_role` values: `owner`, `tenant`, `family`.
+- `lease_agreements`: `id`, `organization_id`, `condo_id`, `unit_id`,
+  `tenant_unit_resident_id`, `owner_unit_resident_id`, `status`, `starts_at`,
+  `ends_at`, `signed_contract_object_path`.
+  - Status values: `draft`, `active`, `ended`, `terminated`, `cancelled`.
+  - `tenant_unit_resident_id` must reference a `unit_residents` row with
+    `resident_role = tenant` in the same `organization_id`, `condo_id`, and
+    `unit_id`.
+  - `owner_unit_resident_id` is nullable. When present, it must reference an
+    owner `unit_residents` row in the same `organization_id`, `condo_id`, and
+    `unit_id`.
+  - A Unit may have at most one active tenant lease in v1.
+  - `ends_at` is contract information for staff review only. v1 does not revoke
+    tenant access from `ends_at` alone.
+- `move_out_checklists`: `id`, `organization_id`, `condo_id`, `unit_id`,
+  `lease_agreement_id`, `tenant_unit_resident_id`, `utilities_status`,
+  `deposit_status`, `damage_status`, `move_out_status`, `review_note`,
+  `confirmed_by_staff_id`, `confirmed_at`, `evidence_object_paths`.
+  - `utilities_status` values: `pending`, `cleared`, `waived`, `blocked`.
+  - `deposit_status` values: `pending`, `resolved`, `waived`, `disputed`.
+  - `damage_status` values: `pending`, `no_damage`, `charged`, `disputed`.
+  - `move_out_status` values: `draft`, `inspecting`, `ready_to_close`,
+    `confirmed`, `cancelled`.
+  - Checklist status is operational evidence only. It records whether staff can
+    close the tenant lifecycle; it is not an invoice, payment, or accounting
+    record.
 - `staff_users`: `id`, `auth_user_id`, `username`, `internal_email`,
   `display_name`, `status`.
   - `username` is globally unique after normalization.
@@ -186,6 +240,17 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 - `line_quota_counters`: `id`, `organization_id`, `condo_id`, `line_channel_id`,
   `period_start`, `period_end`, `priority`, `sent_count`, `soft_limit`,
   `hard_limit`.
+  - These counters support quota enforcement for LINE sending. They are separate
+    from platform analytics snapshots.
+- `platform_usage_daily`: `id`, `usage_date`, `organization_id`, `condo_id`,
+  `active_condo_count`, `resident_count`, `bound_line_user_count`,
+  `notification_job_count`, `notification_delivery_count`, `line_message_count`.
+  - The unique key is `usage_date + organization_id + condo_id`, with `condo_id`
+    nullable only for Organization-level rollups.
+  - Rows are written by an hourly or daily aggregate job. Do not update this table
+    from per-row triggers or inside high-volume notification delivery loops.
+  - Source tables remain the authority for live operational state; this table is
+    delayed analytics for the platform owner.
 
 ## Bootstrap And Onboarding Contract
 
@@ -212,13 +277,26 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   security boundary.
 - Staff/admin requests use a Supabase session. Server code resolves the actor from
   `auth.uid()` through `staff_users` and active `staff_memberships`.
+- Platform owner requests use Supabase Auth with
+  `app_metadata.role = "platform_super_admin"` plus a short-lived session. This
+  claim is set or removed only by a service-role/admin-only script or function.
+- Sensitive platform actions must also reject tokens older than the latest
+  platform admin grant/revocation version or revocation timestamp recorded by the
+  service-role path. Removing platform access must not depend on waiting for an
+  old JWT to expire naturally.
 - RLS policies deny by default and allow only when an active membership or active
   resident relationship grants the requested scope.
 - Customer-data tables must include enough tenant keys for RLS to avoid joins
   through nullable or ambiguous paths.
+- Operational write policies and helpers check the Organization/Condo
+  `platform_access_status` runtime flags. They must not join
+  `tenant_subscriptions` on each operational row.
 - Critical writes derive target scope server-side. The frontend may submit an
   intended scope, but the server validates role, permission, condo, and allowed
   scope before enqueue.
+- Every staff Edge Function that mutates customer data or enqueues LINE
+  notifications must call a shared `assert_condo_platform_active(condo_id)` guard
+  before writing. RLS is a safety net, not the only suspend enforcement layer.
 - Staff permission checks use effective permissions, not route or nav visibility.
 - LIFF frontend never uses the anon Supabase client to query customer-data tables.
   It calls Edge Functions/RPC that verify LIFF identity and derive scope.
@@ -226,6 +304,9 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 ### Canonical v1 Permissions
 
 - Residents: `residents:read`, `residents:write`, `residents:deactivate`.
+- Leases: `leases:read`, `leases:write`, `leases:end`.
+- Move-out: `move_out_checklists:review`, `move_out_checklists:confirm`,
+  `tenant_access:revoke`.
 - LINE binding: `line_bindings:read`, `line_bindings:approve`,
   `line_bindings:reject`.
 - Announcements: `announcements:draft`, `announcements:publish`,
@@ -241,6 +322,12 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 | `residents:read` | yes | yes | no | no |
 | `residents:write` | yes | yes | no | no |
 | `residents:deactivate` | yes | yes | no | no |
+| `leases:read` | yes | yes | yes | no |
+| `leases:write` | yes | yes | no | no |
+| `leases:end` | yes | yes | no | no |
+| `move_out_checklists:review` | yes | yes | yes | no |
+| `move_out_checklists:confirm` | yes | yes | no | no |
+| `tenant_access:revoke` | yes | yes | no | no |
 | `line_bindings:read` | yes | yes | no | no |
 | `line_bindings:approve` | yes | yes | no | no |
 | `line_bindings:reject` | yes | yes | no | no |
@@ -262,6 +349,33 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   Security-sent critical messages to all Condo, Building, or Floor scopes.
 - A `deny` override removes a permission even when the preset grants it.
 
+## Tenant Lease And Move-Out Contract
+
+- `unit_residents` is the resident-to-unit access relationship. `lease_agreements`
+  is the tenant contract history for that relationship.
+- v1 supports one active tenant lease per Unit. Multi-tenant lease participants
+  and shared leases are post-v1.
+- Activating a new tenant lease is blocked when the Unit already has an active
+  tenant lease or an active tenant `unit_residents` row tied to a previous lease.
+  Owner and family `unit_residents` rows do not block tenant lease activation.
+- Resident import creates or updates `residents` and `unit_residents` only. It
+  does not create lease rows in v1. Staff must create and activate a lease from
+  the admin workflow before lease-gated tenant access is enforced for that Unit.
+- For existing pilot or imported tenant data, a Condo may enable lease-gated LIFF
+  access only after staff backfills active lease rows for active tenant
+  `unit_residents`. Until that Condo-level lease workflow is enabled, imported
+  tenants keep the existing active `line_bindings + unit_residents` LIFF behavior.
+- v1 does not automatically end leases or revoke tenant access when `ends_at`
+  passes. Staff must explicitly close the lease or confirm move-out through a
+  backend function.
+- `staff_close_tenant_move_out` closes the move-out lifecycle in one transaction:
+  confirms the checklist, sets the lease to `ended` or `terminated`, ends the
+  tenant `unit_residents` row, revokes active tenant `line_bindings`, and writes
+  audit events.
+- New tenant LINE binding for a Unit is blocked while that Unit still has an
+  active tenant lease or active tenant `unit_residents` row tied to the previous
+  lease. Owner and family access must not be revoked by tenant move-out.
+
 ## Staff/Admin Auth Contract
 
 - Login form accepts `username` and `password`.
@@ -281,10 +395,17 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 - The Edge Function verifies the token with LINE, resolves `line_user_id`, resolves
   the `line_channel_id`, and derives allowed Condo/Unit contexts from active
   `line_bindings` plus active `unit_residents`.
+- For tenant `unit_residents` in a Condo where lease-gated access is enabled, an
+  allowed LIFF context also requires an active `lease_agreements` row for the same
+  `unit_id` and `tenant_unit_resident_id`, and no confirmed move-out checklist
+  that has revoked access.
 - Client-supplied `condo_id` and `unit_id` are accepted only when they are in the
   derived allowed-context list.
 - Auto-bind requires exactly one active Unit Resident match for
   `condo_id + building/unit + normalized_phone`.
+- Tenant auto-bind is blocked when the target Unit has an active tenant lease or
+  active tenant `unit_residents` row for a different tenant that has not been
+  closed through the move-out flow.
 - Name-only, phone mismatch, and multiple phone matches create `pending_review`.
 - Automatic binding records `evidence_json` describing unit match, phone match,
   normalization, candidate count, and actor.
@@ -349,9 +470,28 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
 - `platform_activate_condo`: validate onboarding checks and set `active_at`;
   requires platform actor or an active Condo Admin membership with
   `condo_settings:manage` for that Condo.
+- `platform_list_tenants`: list Organizations/Condos, subscription state,
+  platform access status, and latest usage snapshot; platform super admin only.
+- `platform_update_subscription_status`: change tenant subscription state and
+  runtime access flags transactionally; platform super admin only; requires reason
+  and writes audit.
+- `platform_get_usage_metrics`: read global and per-tenant delayed usage metrics;
+  platform super admin only.
+- `platform_aggregate_usage_tick`: scheduled aggregate job that reads source
+  tables and upserts `platform_usage_daily`; service-role/scheduler only.
 - `staff_login_resolve_username`: input `username`; output `internal_email`.
 - `staff_reset_password`: input `staff_user_id`, password reset mode; requires
   `staff:manage`; writes audit.
+- `staff_create_lease`: create or update draft lease evidence for a tenant Unit
+  Resident; requires `leases:write`; writes audit.
+- `staff_activate_lease`: activate a lease only when no active tenant lease or
+  prior active tenant row blocks the Unit; requires `leases:write`; writes audit.
+- `staff_review_move_out_checklist`: update move-out checklist statuses, note, and
+  evidence; requires `move_out_checklists:review`; writes audit.
+- `staff_close_tenant_move_out`: confirm checklist, end lease, end tenant Unit
+  Resident, revoke tenant LINE Binding, and write audit in one transaction;
+  requires `move_out_checklists:confirm`, `leases:end`, and
+  `tenant_access:revoke`.
 - `liff_resolve_contexts`: input LINE token and optional selected context; output
   active Condo/Unit contexts.
 - `liff_bind_line`: input LINE token, condo deep-link context, unit identifier,
@@ -370,7 +510,8 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
 - `import_apply`: apply selected add/change/deactivation rows; requires
   `imports:run` and `imports:apply_deactivation` for deactivation rows.
 - `notification_worker_tick`: scheduled worker that locks queued jobs, dispatches
-  LINE requests, classifies outcomes, updates counters, and schedules retries.
+  LINE requests, classifies outcomes, updates quota-enforcement counters when
+  needed, and schedules retries. It must not update `platform_usage_daily`.
 - `notification_resend`: manual resend for authorized operators when a delivery is
   retryable or `outcome_unknown`.
 
@@ -413,13 +554,19 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
   - `parcel-photos`: private.
   - `announcement-media`: private.
   - `import-files`: private.
+  - `lease-documents`: private.
+  - `move-out-evidence`: private.
 - Object paths include tenant and entity scope:
   - `org/<organization_id>/condo/<condo_id>/parcels/<parcel_id>/<file_id>`.
   - `org/<organization_id>/condo/<condo_id>/announcements/<announcement_id>/<file_id>`.
   - `org/<organization_id>/condo/<condo_id>/imports/<import_batch_id>/<file_id>`.
+  - `org/<organization_id>/condo/<condo_id>/units/<unit_id>/leases/<lease_id>/contract/<file_id>`.
+  - `org/<organization_id>/condo/<condo_id>/units/<unit_id>/move-outs/<checklist_id>/<file_id>`.
 - All reads use short-lived signed URLs generated server-side after authorization.
 - Allowed image MIME types: `image/jpeg`, `image/png`, `image/webp`.
-- Max image size: 10 MB for Parcel photos, 5 MB for Announcement images.
+- Lease documents and move-out evidence additionally allow `application/pdf`.
+- Max image size: 10 MB for Parcel photos, 5 MB for Announcement images, 10 MB
+  for move-out evidence images, and 15 MB for lease PDFs.
 - Import uploads accept UTF-8 CSV only.
 - Storage object paths are never trusted as authorization proof; table ownership
   and actor scope are checked first.
@@ -446,6 +593,8 @@ Required columns: `building`, `unit_no`, `resident_name`, `phone`,
 - Resident import cannot apply a row that references an unknown Building/Unit.
 - Resident matching key in v1 is `organization_id + normalized_phone` when phone
   is present; ambiguous or missing phone requires manual review instead of merge.
+- Resident import does not create lease agreements in v1. Tenant lease creation is
+  a staff workflow after the tenant Unit Resident exists.
 
 ### Diff And Apply Rules
 
@@ -477,9 +626,14 @@ Required audited actions:
   scope, message snapshot, quota-bypass confirmation, and notification id.
 - Platform bootstrap, Condo creation, first Condo Admin creation, and Condo
   activation.
+- Platform super admin grant/revocation, subscription state changes, and
+  Organization/Condo platform access status changes, including reason, before and
+  after values, and actor.
 - LINE webhook blocked/unreachable state changes when they change an active
   binding's `reachable_state`.
 - LINE auto-bind and staff review decision, including match evidence and reviewer.
+- Lease create/activate/end, move-out checklist review/confirm, and tenant access
+  revoke, including before/after access state and uploaded evidence paths.
 - Staff permission grant/deny and preset role assignment changes.
 - Import apply, stale override, and deactivation confirmation.
 - Resident or Unit Resident deactivation and LINE Binding impact summary.
@@ -489,9 +643,24 @@ Required audited actions:
 
 - RLS isolation denies cross-Organization, cross-Condo, and cross-Unit access for
   admin, staff, and resident paths.
+- Platform routes and platform functions deny users without the
+  `platform_super_admin` claim, and deny stale tokens after platform access
+  revocation.
+- Suspended or cancelled Organization/Condo access blocks staff operational writes
+  and LINE enqueue paths while preserving authorized reads and platform recovery
+  actions.
+- Operational write enforcement uses runtime platform access flags, not joins to
+  `tenant_subscriptions`.
+- `platform_aggregate_usage_tick` upserts idempotent usage snapshots and can run
+  repeatedly without double counting or row-locking high-volume delivery loops.
 - Frontend route bypass is blocked backend-side.
 - `/liff` revoked binding, inactive Unit Resident, invalid selected context, and
   missing context cannot read customer data.
+- Tenant LIFF access in a Condo with lease-gated access enabled requires active
+  binding, active tenant Unit Resident, active lease for the same Unit Resident,
+  and no confirmed move-out revoke.
+- Imported tenant data keeps existing LIFF behavior until lease rows are
+  backfilled and lease-gated access is enabled for that Condo.
 - Multi-Condo or multi-Unit Residents receive a context list and must select
   context before Unit-scoped workflows.
 - Staff/admin username is globally unique; login resolves internal email; Condo
@@ -500,6 +669,13 @@ Required audited actions:
   notification settings, and activation checks.
 - Permission matrix matches the preset table; `deny` override wins over `grant`,
   and hidden nav is not treated as authorization.
+- Lease permission tests cover Admin/Manager full access, Juristic read/review
+  only, and Security denied by default.
+- Tenant move-out close is transactional: lease ended, tenant Unit Resident ended,
+  tenant LINE Binding revoked, and audit written together. `ends_at` alone never
+  revokes access.
+- Active tenant lease uniqueness blocks overlapping active leases for one Unit,
+  while owner and family access remains unaffected.
 - LINE binding covers exact unit+phone auto-bind, name-only review, ambiguous
   phone review, inactive reject, duplicate same-Condo hard block, and multi-Condo
   same-LINE allow.
