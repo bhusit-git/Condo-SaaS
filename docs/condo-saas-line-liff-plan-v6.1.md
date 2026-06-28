@@ -12,7 +12,7 @@ audit, and acceptance tests.
 
 ## Key Decisions
 
-- Tenant model: `Organization` = customer/account, `Condo` = โครงการ with required setup identity/location fields; `Building -> floor -> Unit` เป็น layout ของหน้าผังห้องที่คอนโดกำหนดเอง.
+- Tenant model: `Organization` = customer/account or owner/HQ, `Condo` = โครงการ/ที่พัก/สาขา with required setup identity/location fields; `Building -> floor -> Unit` เป็น layout ของหน้าผังห้องที่คอนโดหรือที่พักกำหนดเอง. ระบบเดียวรองรับลูกค้าที่มีหลายองค์กร หลายคอนโด/ที่พัก/สาขา และหลายตึกโดยไม่ต้องสร้าง deployment แยกต่อสถานที่.
 - Resident model: `Resident` เป็น organization-scoped identity; คนเดียวกันในคนละ organization เป็นคนละ record. `Unit Resident` คือความสัมพันธ์กับห้อง เช่น owner/tenant/family. Tenant lease history อยู่ใน `lease_agreements` และผูกกับ tenant `unit_residents` ไม่ใช่แค่ resident identity.
 - Staff model: v1 preset roles คือ `Condo Admin`, `Condo Manager`, `Juristic Staff`, `Security Staff`; role builder เต็ม defer หลัง v1. v1 ใช้ preset roles plus permission toggles สำหรับสิทธิ์สำคัญ. v1.1 เพิ่ม `Technician` และ `Housekeeping Staff` สำหรับงานซ่อม/ทำความสะอาดที่ถูก assign.
 - Authorization: route เป็น UX convention เท่านั้น; enforce จริงผ่าน permission checks, Edge Functions/RPC, และ Supabase RLS. Critical writes derive scope server-side เสมอ.
@@ -20,6 +20,7 @@ audit, and acceptance tests.
 - LINE inbound: v1 มี `line_webhook_ingest` สำหรับ verify signature, dedupe LINE events, resolve channel, capture usable reply token, and update reachable state.
 - Notifications: prefer reply when possible, individual push สำหรับ targeted events, multicast สำหรับ announcement ใหญ่, per-condo quota/usage guardrail สำหรับ Shared OA. Parcel recipients and critical fallback behavior come from Condo notification settings.
 - Platform control plane: v1 includes a minimal owner-only area at `/admin/platform` for tenant subscription state, access suspension/reactivation, and delayed global usage metrics. It is not resident rent, water, electricity, payment, or accounting billing.
+- Customer-side Owner/HQ: for accommodation businesses with multiple properties or branches, the product direction is an Organization-level overview first, then selecting the Condo/property/branch context for site-scoped operations. This customer-side Owner/HQ is distinct from the SaaS Platform Super Admin and from resident `owner`.
 - Frontend architecture: v1 uses separate React Vite apps for `admin`, `staff`, and `liff` inside one workspace. Default deploy entrypoints are path routes `/admin`, `/staff`, and `/liff`; `/admin/platform` stays inside the admin app in v1 instead of adding a fourth deployment entrypoint. The apps share intentional packages for UI primitives, design tokens, domain types, permissions, and Edge Function/RPC clients, but keep routing, auth assumptions, bundles, and UX flows separate. Feature-specific UI such as admin import diff tables, staff camera flows, platform owner views, and LIFF context switchers stays inside the owning app until reuse is proven.
 - Staff/admin auth: staff and admin users sign in with custom username + password. Usernames are globally unique across the platform and map to an internal email surrogate for Supabase Auth. v1 password recovery is Condo Admin reset; no self-service password reset in v1.
 
@@ -59,7 +60,7 @@ audit, and acceptance tests.
 
 ## Product Modules
 
-- Onboarding: create organization/condo, capture required Condo profile fields (name, address, province, postal code), create buildings/floors/units in the room-layout flow, import CSV, review diff, create preset roles, configure Shared LINE OA mode, generate condo QR/LIFF links, activate condo after required checks.
+- Onboarding: create organization/condo, capture required Condo profile fields (name, address, province, postal code), create buildings/floors/units in the room-layout flow, import CSV, review diff, create preset roles, configure Shared LINE OA mode, generate condo QR/LIFF links, activate condo after required checks. For dorm or accommodation language, each Condo may be presented as one property/branch and each Building as a physical building inside that property/branch.
 - Admin operations: unit/resident management, preset role assignment, permission toggles, binding review, announcements, parcels, imports.
 - Platform owner operations: view tenants, suspend/reactivate access, inspect
   subscription state, review delayed usage metrics, and audit platform actions

@@ -6,11 +6,33 @@ The customer or account that owns the SaaS relationship.
 
 An Organization may manage one or more Condos.
 
+For accommodation, dorm, or small-property customers, an Organization can
+represent the owner company or HQ that operates many locations. Those locations
+are modeled as Condos in v1 rather than separate deployments.
+
 ## Condo
 
 A condo project managed within an Organization.
 
 A Condo has its own buildings, floors, units, residents, staff scope, and operational configuration.
+
+In Thai product language for dorms or small accommodation businesses, a Condo may
+also be called a property, accommodation site, or branch. The canonical system
+entity remains Condo unless the implementation contract explicitly introduces a
+separate Branch entity.
+
+## Accommodation Owner / HQ
+
+The customer-side business owner or head office that oversees multiple Condos,
+properties, accommodation sites, or branches inside one Organization.
+
+Accommodation Owner / HQ is distinct from Platform Super Admin, which belongs to
+the SaaS operator, and distinct from the resident role `owner`, which describes a
+Resident's relationship to a Unit.
+
+The expected product flow for multi-site customers is an Organization-level
+overview first, then choosing the specific Condo/property/branch context before
+entering site-scoped operations.
 
 ## Platform Super Admin
 
@@ -188,6 +210,10 @@ A condo-scoped staff role responsible for system administration for a condo.
 
 Condo Admins manage setup, staff access, and sensitive condo-level configuration. A person may be both a Condo Admin and a Condo Manager in small condos.
 
+Condo Admin is site-scoped. For multi-site customers, Organization-level Owner/HQ
+access must not be treated as the same role unless the contract explicitly grants
+that broader scope.
+
 ## Security Staff
 
 A condo-scoped staff role responsible for front desk or security operations.
@@ -297,6 +323,9 @@ Condo setup captures the Condo profile first: name, address, province, and posta
 A physical building inside a Condo.
 
 Each Condo defines its own Buildings, floors per Building, and Units per floor.
+
+For dorms or accommodation businesses, Building is the canonical entity for a
+physical tower/building inside one property or branch.
 
 ## Parcel
 

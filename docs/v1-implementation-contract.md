@@ -64,9 +64,14 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   - `platform_access_status` values: `allowed`, `suspended`, `cancelled`.
   - `platform_access_status` is the runtime access flag used by RLS helpers and
     Edge Functions. It is not the subscription history.
+  - In accommodation-owner language, an Organization may represent the owner
+    company or HQ that operates multiple Condos/properties/branches.
 - `condos`: `id`, `organization_id`, `name`, `address_line`, `province`,
   `postal_code`, `status`, `line_mode`, `shared_line_channel_id`, `active_at`,
   `platform_access_status`.
+  - In dorm, apartment, or small-accommodation language, a Condo may be presented
+    as one property, accommodation site, or branch. Do not add a separate `branch`
+    table in v1 unless scope is explicitly reopened.
   - Required setup fields: `name`, `address_line`, `province`, `postal_code`.
     Condo activation is blocked until these fields are present.
   - Building, floor, and unit baseline data belongs to the room-layout flow, not
@@ -151,6 +156,8 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
     formulas, late-fee accrual, partial payment, or payment allocation.
 - `buildings`: `id`, `organization_id`, `condo_id`, `name`, `status`.
   - Unique active building name per Condo.
+  - Building is the canonical entity for a physical building/tower inside one
+    Condo/property/branch.
 - `units`: `id`, `organization_id`, `condo_id`, `building_id`, `floor`, `unit_no`,
   `status`.
   - Unique active unit identity per `condo_id + building_id + unit_no`.
@@ -347,6 +354,11 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   configuration.
 - Creating a pilot Condo requires a platform actor. v1 does not add
   Organization-scoped staff membership.
+- The data model supports one Organization with multiple Condos/properties/branches
+  and each Condo with multiple Buildings. Customer-side Owner/HQ overview and
+  Organization-scoped staff membership are product directions for multi-site
+  customers, but they are not part of the v1 validation slice unless scope is
+  explicitly reopened.
 - `platform_create_condo` creates the Organization when needed, creates the Condo
   in `setup` status, attaches the Shared Platform LINE channel, creates default
   `condo_notification_settings` and `condo_quota_settings`, creates the first
@@ -361,6 +373,9 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 
 - Application routes are UX conventions only. Backend checks and RLS are the
   security boundary.
+- Customer-side Owner/HQ access for multi-site organizations must be modeled as
+  Organization-scoped authorization when introduced. It must not reuse Platform
+  Super Admin authority and must not be confused with the resident `owner` role.
 - Staff/admin requests use a Supabase session. Server code resolves the actor from
   `auth.uid()` through `staff_users` and active `staff_memberships`.
 - Platform owner requests use Supabase Auth with
@@ -811,6 +826,12 @@ Required audited actions:
   backfilled and lease-gated access is enabled for that Condo.
 - Multi-Condo or multi-Unit Residents receive a context list and must select
   context before Unit-scoped workflows.
+- Multi-site owner/HQ behavior is covered at the model boundary by one
+  Organization containing multiple Condos/properties/branches and each Condo
+  containing multiple Buildings. If the Owner/HQ dashboard is implemented in v1,
+  tests must verify Organization-level overview first, explicit Condo/property/
+  branch selection before site-scoped operations, and no privilege leakage into
+  Platform Super Admin or resident `owner` behavior.
 - Staff/admin username is globally unique; login resolves internal email; Condo
   Admin reset works; self-service reset is unavailable in v1.
 - Bootstrap seeds Shared LINE, protected presets, first Condo Admin, default
