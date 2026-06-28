@@ -23,6 +23,7 @@ v1 โฟกัส flow หลักสำหรับ pilot:
 - **Condo Admin**: จัดการข้อมูลคอนโด พนักงาน สิทธิ์ และการตั้งค่า
 - **Condo Manager / Juristic Staff**: จัดการงานนิติ เช่น ประกาศ ลูกบ้าน พัสดุ และ import
 - **Security Staff**: รับพัสดุ ส่งมอบพัสดุ และส่งประกาศฉุกเฉินเมื่อได้รับสิทธิ์
+- **Technician / Housekeeping Staff (v1.1)**: รับงานซ่อมหรืองานทำความสะอาดที่แอดมิน/นิติ assign ให้ กดเริ่มงาน และกดเสร็จพร้อมหลักฐานตาม policy ของคอนโด
 - **Resident**: ผูกบัญชี LINE กับห้อง ดูประกาศ และดูสถานะพัสดุผ่าน LIFF
 
 ## Core Features
@@ -60,6 +61,14 @@ v1 โฟกัส flow หลักสำหรับ pilot:
 - ลูกบ้าน active ของห้องสามารถเห็นสถานะพัสดุได้
 - การรับพัสดุคืนยืนยันโดย staff พร้อมชื่อผู้รับ note หรือรูป optional
 - ส่ง LINE notification ตาม policy ของคอนโด เช่น owner/tenant/all/none
+
+### Maintenance / Cleaning Requests (v1.1)
+
+- ลูกบ้านหรือ staff สร้าง request งานซ่อมหรืองานทำความสะอาด
+- แอดมิน/นิติเป็นคนตรวจและ assign งานให้ Technician หรือ Housekeeping Staff
+- ผู้รับงานเห็นเฉพาะงานที่ได้รับมอบหมาย กดรับงาน เริ่มงาน และกดเสร็จผ่าน `/staff`
+- Condo Admin ตั้งค่าได้ว่าตอนกดเสร็จงานต้องมีรูปหลักฐานหรือไม่ โดย default ให้เปิดไว้
+- v1.1 ยังไม่เปิดคิวงานให้ช่างหรือแม่บ้านกดรับเองตามหมวดหมู่; เก็บไว้เป็น future enhancement
 
 ### Announcements
 
@@ -105,13 +114,17 @@ Stack ที่กำหนดไว้สำหรับ v1:
 - Staff preset roles และ permission toggles
 - Super Admin control plane แบบ minimal สำหรับเจ้าของแพลตฟอร์ม:
   subscription state, suspend/reactivate tenant, delayed usage metrics
+- Billing settings เฉพาะการตั้งค่า: ค่าเช่า ค่าน้ำ ค่าไฟ ค่าปรับล่าช้า
+  และตัวอย่าง/preview สูตรคำนวณในหน้าตั้งค่า
 - Audit events สำหรับ action สำคัญ
 
 ยังไม่อยู่ใน v1:
 
-- Maintenance requests
-- Resident billing, rent charge, water/electricity bills, invoice lifecycle,
-  payment collection, accounting rules, และ payment gateway
+- Maintenance / Cleaning requests with Technician and Housekeeping Staff roles
+  อยู่ใน v1.1 ไม่ใช่ v1 pilot
+- Resident billing runtime, rent charge, water/electricity bills, invoice
+  lifecycle, meter reading persistence, persisted charges, payment collection,
+  accounting rules, และ payment gateway
 - Billing / Utility Bills LINE notifications สำหรับค่าเช่า ค่าน้ำ ค่าไฟ
 - Facility booking
 - Visitor QR
@@ -119,7 +132,6 @@ Stack ที่กำหนดไว้สำหรับ v1:
 - Full incident case management
 - Full custom role builder
 - Staff self-service password reset
-- Technician role
 - Custom LINE OA admin/migration/re-bind UI แบบเต็ม
 
 ## Key Design Decisions
@@ -136,15 +148,28 @@ Stack ที่กำหนดไว้สำหรับ v1:
 - Usage metrics เป็น hourly/daily aggregate ไม่ใช่ realtime trigger counter
 - LIFF frontend ไม่ query customer-data table โดยตรง แต่เรียก Edge Functions/RPC ที่ verify LIFF identity ฝั่ง server
 - Critical notification ต้องมี reason, scope confirmation, audit record และ rate/quota guardrail
+- Billing settings ใน v1 เป็น configuration/metadata เท่านั้น; ยังไม่สร้าง
+  invoice, ไม่บันทึกยอดจริง, ไม่รับชำระเงิน และไม่ส่ง billing notification
 
 ## Post-v1 Roadmap
 
+### Maintenance / Cleaning v1.1
+
+- เพิ่ม preset roles `Technician` และ `Housekeeping Staff`
+- แอดมิน/นิติ assign งานให้ผู้รับผิดชอบก่อนในรอบแรก
+- ผู้รับงานกดรับงาน เริ่มงาน และ resolve งานผ่าน `/staff`
+- Condo Admin เปิด/ปิด policy รูปหลักฐานตอนปิดงานได้ต่อคอนโด
+- อนาคตค่อยเพิ่มหมวดหมู่/skill matching ให้ช่างหรือแม่บ้านเห็นงานที่ตรงประเภทและกดรับเองได้
+
 ### Billing / Utility Bills
 
+- หน้าจดมิเตอร์น้ำ/ไฟและการบันทึกหน่วยใช้งานจริง
 - แจ้งเตือนออกบิลค่าเช่า ค่าน้ำ และค่าไฟผ่าน LINE
 - แจ้งเตือนก่อนครบกำหนดชำระและแจ้งเตือนค้างชำระ
 - ให้ผู้เช่าเปิด LIFF เพื่อดูรายละเอียดยอด สถานะบิล และประวัติการแจ้งเตือน
-- ใช้ LINE notification queue, LINE Binding, และ LIFF access pattern เดิมเป็นฐาน แต่ยังไม่กำหนด schema, payment flow, invoice lifecycle, accounting rules, หรือ payment gateway ใน v1
+- ใช้ billing settings, LINE notification queue, LINE Binding, และ LIFF
+  access pattern เดิมเป็นฐาน แต่ยังไม่กำหนด payment flow, invoice lifecycle,
+  accounting rules, หรือ payment gateway ใน v1
 
 ## Documentation
 

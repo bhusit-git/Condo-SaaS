@@ -102,17 +102,26 @@ A future LINE notification for rent charges, utility bills, due-date reminders, 
 
 Billing Notifications are post-v1. They are expected to reuse the platform notification queue, LINE Binding, and LIFF access pattern, but they are not committed v1 behavior.
 
+## Billing Settings
+
+A v1 configuration-only surface for future resident billing rules.
+
+Billing Settings may store Condo-scoped rent rules, water/electricity formula
+settings, rounding policy, and late-fee metadata. They do not create invoices,
+persisted charges, meter readings, payments, accounting entries, or LINE billing
+notifications in v1.
+
 ## Rent Charge
 
 A future billing-domain charge for rent owed by a tenant or responsible Resident relationship.
 
-Rent Charges are post-v1 and do not define v1 tables, permissions, invoice lifecycle, payment flow, accounting rules, or payment gateway behavior.
+Rent Charges are post-v1 and do not define v1 invoice lifecycle, payment flow, accounting rules, payment gateway behavior, or daily-rent invoice conversion. v1 Billing Settings may store rent-rule configuration only.
 
 ## Utility Bill
 
 A future billing-domain bill for utilities such as water or electricity.
 
-Utility Bills are post-v1 and may later notify residents through LINE when issued, near due date, or overdue.
+Utility Bills are post-v1 and may later notify residents through LINE when issued, near due date, or overdue. v1 Billing Settings may store water/electricity formula configuration and preview examples only.
 
 ## Lease Agreement
 
@@ -185,6 +194,24 @@ A condo-scoped staff role responsible for front desk or security operations.
 
 In v1, Security Staff can handle parcel receiving, parcel pickup, and urgent incident notification when granted the relevant permission.
 
+## Technician
+
+A condo-scoped v1.1 staff role responsible for assigned maintenance work.
+
+Technicians can see, accept, start, and resolve only Maintenance Requests assigned
+to them and categorized as maintenance work. They do not receive resident
+management, staff management, settings, LINE binding, import, parcel, or
+announcement permissions by default.
+
+## Housekeeping Staff
+
+A condo-scoped v1.1 staff role responsible for assigned cleaning work.
+
+Housekeeping Staff can see, accept, start, and resolve only Maintenance Requests
+assigned to them and categorized as cleaning work. They do not receive resident
+management, staff management, settings, LINE binding, import, parcel, or
+announcement permissions by default.
+
 ## Staff Permission
 
 A condo-scoped staff capability that may be granted in addition to a staff role.
@@ -195,7 +222,8 @@ Permissions are action-level capabilities, not only module-level access. For exa
 
 Preset roles are created during condo onboarding and may be cloned into custom roles later, while protected system presets remain available as defaults.
 
-Technician is deferred beyond v1. Maintenance operations are deferred beyond the initial pilot scope unless a pilot specifically requires them.
+Technician and Housekeeping Staff are v1.1 preset roles. Maintenance and cleaning
+operations remain outside the v1 pilot validation slice.
 
 Application routes are user experience conventions, not the security boundary. Authorization is based on Staff Permissions and resident relationships, and must also be enforced by backend policies and server-side functions.
 
@@ -284,13 +312,31 @@ The default Parcel LINE notification setting is owner and tenant. Other supporte
 
 ## Maintenance Request
 
-A request reported by an active Unit Resident and linked to the reporting Unit.
+A v1.1 request reported by an active Unit Resident or staff member and linked to
+the reporting Unit when the work is unit-related.
 
-Maintenance Requests may be categorized as unit-related or common-area-related, but they still keep the reporting Unit so staff know which room reported the issue.
+Maintenance Requests may be categorized as unit-related or common-area-related,
+but unit-related requests keep the reporting Unit so staff know which room
+reported the issue.
+
+Maintenance Requests use `request_type` to distinguish maintenance work from
+cleaning work. v1.1 supports `maintenance` and `cleaning`.
 
 Repeated reports of the same issue are recorded as separate Maintenance Requests.
 
-Maintenance Request statuses are submitted, acknowledged, in progress, resolved, closed, rejected, and cancelled.
+Maintenance Request statuses are submitted, acknowledged, assigned, accepted, in
+progress, resolved, closed, rejected, and cancelled.
+
+In v1.1, an Admin, Manager, or authorized Juristic Staff member assigns the work
+before a Technician or Housekeeping Staff member can accept it. Category-based
+self-claim queues are a future enhancement.
+
+`resolved` means the assigned worker has finished the job. `closed` means an
+authorized staff member has reviewed and closed the request.
+
+Condo Admins can configure whether resolution evidence photos are required for
+that Condo. When enabled, resolving a Maintenance Request requires at least one
+photo. When disabled, evidence photos are optional.
 
 Active Residents of the same Unit can see the Unit's Maintenance Requests and resident-visible status history.
 

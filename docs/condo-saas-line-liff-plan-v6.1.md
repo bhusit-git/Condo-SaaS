@@ -14,7 +14,7 @@ audit, and acceptance tests.
 
 - Tenant model: `Organization` = customer/account, `Condo` = โครงการ, `Building -> floor -> Unit` เป็น layout ที่คอนโดกำหนดเอง.
 - Resident model: `Resident` เป็น organization-scoped identity; คนเดียวกันในคนละ organization เป็นคนละ record. `Unit Resident` คือความสัมพันธ์กับห้อง เช่น owner/tenant/family. Tenant lease history อยู่ใน `lease_agreements` และผูกกับ tenant `unit_residents` ไม่ใช่แค่ resident identity.
-- Staff model: v1 preset roles คือ `Condo Admin`, `Condo Manager`, `Juristic Staff`, `Security Staff`; role builder เต็ม defer หลัง v1. v1 ใช้ preset roles plus permission toggles สำหรับสิทธิ์สำคัญ. `Technician` defer เป็น v1.5.
+- Staff model: v1 preset roles คือ `Condo Admin`, `Condo Manager`, `Juristic Staff`, `Security Staff`; role builder เต็ม defer หลัง v1. v1 ใช้ preset roles plus permission toggles สำหรับสิทธิ์สำคัญ. v1.1 เพิ่ม `Technician` และ `Housekeeping Staff` สำหรับงานซ่อม/ทำความสะอาดที่ถูก assign.
 - Authorization: route เป็น UX convention เท่านั้น; enforce จริงผ่าน permission checks, Edge Functions/RPC, และ Supabase RLS. Critical writes derive scope server-side เสมอ.
 - LINE strategy: Shared Platform LINE OA ใน v1 พร้อม condo-specific QR/LIFF deep link. Custom LINE OA เป็น phase 2; v1 เก็บ `line_channel_id`/mode เพื่อไม่ block อนาคต.
 - LINE inbound: v1 มี `line_webhook_ingest` สำหรับ verify signature, dedupe LINE events, resolve channel, capture usable reply token, and update reachable state.
@@ -64,6 +64,9 @@ audit, and acceptance tests.
 - Platform owner operations: view tenants, suspend/reactivate access, inspect
   subscription state, review delayed usage metrics, and audit platform actions
   from `/admin/platform`.
+- Billing settings: v1 includes configuration-only rent, utility, and late-fee
+  settings for future billing use. It does not create invoices, meter readings,
+  persisted charges, payment records, accounting entries, or billing LINE jobs.
 - Staff mobile web: optimized `/staff` workflows for parcel receive/pickup and broad-scope critical announcements.
 - Tenant & Move-In / Move-Out:
   - `unit_residents` remains the access relationship; `lease_agreements` records
@@ -93,8 +96,16 @@ audit, and acceptance tests.
     revoke.
 - Maintenance (v1.1):
   - linked to reporting unit even for common-area category.
+  - supports `request_type = maintenance | cleaning`.
   - repeated reports create separate requests.
-  - statuses: submitted, acknowledged, in progress, resolved, closed, rejected, cancelled.
+  - statuses: submitted, acknowledged, assigned, accepted, in progress, resolved, closed, rejected, cancelled.
+  - Admin/Manager/authorized Juristic Staff assign work first; Technician and
+    Housekeeping Staff see only assigned work in the first release.
+  - `resolved` means the worker finished the job; `closed` means authorized
+    staff reviewed and closed it.
+  - Condo Admin can turn required resolution evidence photos on/off per Condo;
+    default is enabled.
+  - category-based self-claim queues for workers are a future enhancement.
   - same-unit active residents can see resident-visible request/status history.
   - routine status changes do not push LINE; staff may explicitly notify LINE for important updates.
 - Parcels:
@@ -200,9 +211,14 @@ audit, and acceptance tests.
 - CSV is the only bulk import format in v1.
 - SaaS owner subscription management is minimal v1 control-plane behavior. It
   controls tenant access and metrics only; invoice lifecycle, payment collection,
-  accounting rules, and resident utility/rent billing remain outside v1.
-- Maintenance, resident billing, facility booking, visitor QR, documents, full incident case management, contacts, full custom role builder, staff self-service password reset, and Technician role are post-v1 unless pilot demands them.
-- Billing / Utility Bills LINE notifications for rent charges, water charges, electricity charges, due-date reminders, and overdue reminders are post-v1. They should reuse the v1 LINE notification queue, LINE Binding, and LIFF access patterns, but require a separate billing contract before implementation.
+  accounting rules, meter-reading persistence, persisted charges, and resident
+  utility/rent billing remain outside v1.
+- Maintenance and cleaning requests with Technician and Housekeeping Staff roles
+  are v1.1 scoped capabilities, not v1 pilot behavior. Resident billing,
+  facility booking, visitor QR, documents, full incident case management,
+  contacts, full custom role builder, and staff self-service password reset
+  remain post-v1 unless pilot demands them.
+- Billing / Utility Bills LINE notifications for rent charges, water charges, electricity charges, due-date reminders, and overdue reminders are post-v1. They should reuse the v1 LINE notification queue, LINE Binding, and LIFF access patterns, but require a separate billing runtime contract before implementation.
 - Lease contract files and move-out checklist evidence are limited operational
   evidence files in v1, not the full Documents module.
 

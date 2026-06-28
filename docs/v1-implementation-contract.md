@@ -33,15 +33,17 @@ The v1 validation slice is:
 - Platform control plane: v1 includes a minimal owner-only area under
   `/admin/platform` for tenant access status, subscription state, and delayed
   usage metrics. It does not add a separate frontend entrypoint in v1.
-- Maintenance, resident billing, facility booking, visitor QR, documents,
-  contacts, full incident case management, full custom role builder, staff
-  self-service password reset, and Technician role are out of v1 unless a pilot
-  explicitly reopens scope.
-- v1 does not define resident billing tables, resident billing permissions,
-  resident billing Edge Functions, invoice lifecycle, payment flow, accounting
-  rules, or payment gateway behavior. Rent, water, and electricity LINE
-  notifications are post-v1 and require a separate billing contract before
-  implementation.
+- Maintenance and cleaning requests with Technician and Housekeeping Staff roles
+  are v1.1 scoped capabilities, not v1 pilot behavior. Resident billing,
+  facility booking, visitor QR, documents, contacts, full incident case
+  management, full custom role builder, and staff self-service password reset are
+  out of v1 unless a pilot explicitly reopens scope.
+- v1 scope is reopened only for billing settings configuration. v1 may store
+  Condo-scoped rent, utility, and late-fee settings for future billing use, but
+  it does not define invoice creation, bill due-date calculation, partial
+  payment, late-fee accrual, payment allocation, resident billing Edge
+  Functions, accounting rules, payment collection, payment gateway behavior, or
+  rent/water/electricity LINE notifications.
 - Platform subscription management is only for the SaaS owner controlling whether
   an Organization or Condo may keep using the product. It must not be reused for
   resident rent, water, electricity, payment collection, or accounting workflows.
@@ -94,6 +96,54 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   - `period` values: `day`, `month`.
   - Critical notifications may bypass soft limits only when the actor confirms the
     bypass reason; hard limits still apply.
+- `billing_rent_rules`: `id`, `organization_id`, `condo_id`, `scope_type`,
+  `scope_json`, `cadence`, `amount`, `monthly_due_day`, `status`.
+  - This is billing settings configuration only. It must not create invoices,
+    invoice line items, ledger entries, receivables, or payment expectations.
+  - `scope_type` values: `all_units`, `floor`, `unit_list`.
+  - Effective rule precedence is most specific wins: Unit list, then Floor, then
+    All Units.
+  - `cadence` values: `monthly`, `daily`. Each Unit has only one effective rent
+    cadence.
+  - `monthly_due_day` is required only for monthly rent rules.
+  - Daily rent cadence is stored for future billing use only. v1 does not define
+    how daily rent is converted into invoice line items.
+- `billing_utility_settings`: `id`, `organization_id`, `condo_id`,
+  `utility_type`, `formula`, `unit_rate`, `flat_amount`, `minimum_amount`,
+  `minimum_units`, `included_minimum_amount`, `included_minimum_units`,
+  `rounding_policy`, `status`.
+  - This is Condo default configuration only; v1 does not support per-floor or
+    per-unit utility overrides.
+  - `utility_type` values: `water`, `electricity`.
+  - `formula` values:
+    `flat_fee`, `actual_usage`, `actual_with_minimum_amount`,
+    `actual_with_minimum_units`, `included_minimum_then_overage`.
+  - `actual_usage` preview math is `usage_units * unit_rate`.
+  - `actual_with_minimum_amount` preview math is
+    `max(usage_units * unit_rate, minimum_amount)`.
+  - `actual_with_minimum_units` preview math uses `minimum_amount` when
+    `usage_units <= minimum_units`; otherwise it uses `usage_units * unit_rate`.
+  - `included_minimum_then_overage` preview math uses
+    `included_minimum_amount + max(usage_units - included_minimum_units, 0) *
+    unit_rate`.
+  - `rounding_policy` values: `whole_baht`, `two_decimals`.
+  - Preview/example math in the settings UI is allowed. Persisted meter readings,
+    charges, invoices, and utility bill line items are not v1 behavior.
+- `billing_late_fee_rules`: `id`, `organization_id`, `condo_id`, `scope_type`,
+  `scope_json`, `mode`, `amount`, `grace_days`, `max_fee_amount`, `applies_to`,
+  `status`.
+  - This is billing settings metadata only. It must not create late-fee charges,
+    invoice adjustments, receivables, or payment expectations in v1.
+  - `scope_type` values: `all_units`, `floor`, `unit_list`.
+  - Effective rule precedence is most specific wins: Unit list, then Floor, then
+    All Units.
+  - `mode` values: `none`, `fixed_once`, `fixed_per_day`.
+  - `grace_days` defaults to `0`.
+  - `applies_to` is fixed to `future_invoice` in v1 and is metadata only.
+  - `max_fee_amount` is nullable metadata reserved for a future invoice-level cap.
+    v1 stores it but does not enforce it.
+  - v1 does not support percentage fee, compounding fee, multi-step late-fee
+    formulas, late-fee accrual, partial payment, or payment allocation.
 - `buildings`: `id`, `organization_id`, `condo_id`, `name`, `status`.
   - Unique active building name per Condo.
 - `units`: `id`, `organization_id`, `condo_id`, `building_id`, `floor`, `unit_no`,
@@ -146,6 +196,7 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   `preset_role`, `status`.
   - `preset_role` values: `condo_admin`, `condo_manager`, `juristic_staff`,
     `security_staff`.
+  - v1.1 adds `technician` and `housekeeping_staff`.
 - `staff_permission_overrides`: `id`, `organization_id`, `condo_id`,
   `staff_membership_id`, `permission`, `effect`.
   - `effect` values: `grant`, `deny`.
@@ -192,6 +243,36 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 - `announcement_recipients`: `id`, `organization_id`, `condo_id`,
   `announcement_id`, `resident_id`, `unit_id`, `read_at`.
   - Recipients are snapshotted at publish time even when LINE notification is not sent.
+
+### v1.1 Maintenance And Cleaning Tables
+
+- `maintenance_request_settings`: `id`, `organization_id`, `condo_id`,
+  `completion_evidence_photo_required`.
+  - Default `completion_evidence_photo_required = true`.
+  - This setting is Condo-scoped. It must not affect other Condos in the same
+    Organization.
+- `maintenance_requests`: `id`, `organization_id`, `condo_id`, `unit_id`,
+  `request_type`, `location_scope_json`, `reported_by_resident_id`,
+  `reported_by_staff_id`, `status`, `priority`, `title`, `description`,
+  `resident_visible_note`.
+  - `request_type` values: `maintenance`, `cleaning`.
+  - Status values: `submitted`, `acknowledged`, `assigned`, `accepted`,
+    `in_progress`, `resolved`, `closed`, `rejected`, `cancelled`.
+  - `unit_id` is required for unit-related requests and nullable for common-area
+    requests.
+- `maintenance_request_assignments`: `id`, `organization_id`, `condo_id`,
+  `maintenance_request_id`, `assigned_staff_membership_id`,
+  `assigned_by_staff_id`, `assigned_at`, `accepted_at`, `started_at`,
+  `resolved_at`.
+  - v1.1 requires an assignment before a Technician or Housekeeping Staff member
+    can accept work.
+  - Technician assignments are valid only for `request_type = maintenance`.
+  - Housekeeping Staff assignments are valid only for `request_type = cleaning`.
+- `maintenance_request_evidence`: `id`, `organization_id`, `condo_id`,
+  `maintenance_request_id`, `uploaded_by_staff_id`, `object_path`, `note`,
+  `created_at`.
+  - Resolution evidence belongs to the request and is read through signed URLs
+    after authorization.
 
 ### Import And Audit Tables
 
@@ -314,6 +395,36 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 - Parcels: `parcels:receive`, `parcels:pickup`, `parcels:read`.
 - Imports/settings/staff: `imports:run`, `imports:apply_deactivation`,
   `staff:manage`, `line_settings:manage`, `condo_settings:manage`.
+  - Billing settings are managed through `condo_settings:manage`; v1 does not add
+    resident billing permissions.
+
+### v1.1 Maintenance And Cleaning Permissions
+
+- Maintenance requests: `maintenance_requests:read_all`,
+  `maintenance_requests:read_assigned`, `maintenance_requests:accept_assigned`,
+  `maintenance_requests:start_assigned`, `maintenance_requests:resolve_assigned`,
+  `maintenance_requests:upload_resolution_evidence`,
+  `maintenance_requests:assign`, `maintenance_requests:close`.
+- Maintenance request settings: `maintenance_request_settings:manage`.
+
+### v1.1 Maintenance And Cleaning Preset Defaults
+
+| Permission | Condo Admin | Condo Manager | Juristic Staff | Security Staff | Technician | Housekeeping Staff |
+| --- | --- | --- | --- | --- | --- | --- |
+| `maintenance_requests:read_all` | yes | yes | grant-only | no | no | no |
+| `maintenance_requests:read_assigned` | yes | yes | grant-only | no | yes | yes |
+| `maintenance_requests:accept_assigned` | yes | yes | grant-only | no | yes | yes |
+| `maintenance_requests:start_assigned` | yes | yes | grant-only | no | yes | yes |
+| `maintenance_requests:resolve_assigned` | yes | yes | grant-only | no | yes | yes |
+| `maintenance_requests:upload_resolution_evidence` | yes | yes | grant-only | no | yes | yes |
+| `maintenance_requests:assign` | yes | yes | grant-only | no | no | no |
+| `maintenance_requests:close` | yes | yes | grant-only | no | no | no |
+| `maintenance_request_settings:manage` | yes | no | no | no | no | no |
+
+- Technician defaults apply only to assigned `maintenance` requests.
+- Housekeeping Staff defaults apply only to assigned `cleaning` requests.
+- v1.1 does not include worker self-claim queues. Category or skill matching for
+  workers to see and claim unassigned work is a future enhancement.
 
 ### Preset Permission Matrix
 
@@ -515,6 +626,31 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
 - `notification_resend`: manual resend for authorized operators when a delivery is
   retryable or `outcome_unknown`.
 
+### v1.1 Maintenance And Cleaning Functions
+
+- `staff_assign_maintenance_request`: assign a submitted or acknowledged
+  Maintenance Request to a Technician or Housekeeping Staff membership; requires
+  `maintenance_requests:assign`; writes audit.
+- `staff_accept_maintenance_request`: assigned worker accepts the request;
+  requires `maintenance_requests:accept_assigned` and active assignment.
+- `staff_start_maintenance_request`: assigned worker marks work in progress;
+  requires `maintenance_requests:start_assigned` and accepted assignment.
+- `staff_resolve_maintenance_request`: assigned worker resolves the request with
+  optional note and evidence photos; requires
+  `maintenance_requests:resolve_assigned` and
+  `maintenance_requests:upload_resolution_evidence` when uploading evidence.
+  When `completion_evidence_photo_required` is enabled for the Condo, at least
+  one evidence photo is required.
+- `staff_close_maintenance_request`: authorized staff reviews and closes a
+  resolved request; requires `maintenance_requests:close`; writes audit.
+- `staff_update_maintenance_request_settings`: update the Condo-scoped evidence
+  photo requirement; requires `maintenance_request_settings:manage`; writes
+  audit.
+- `liff_create_maintenance_request`: create a Maintenance Request for the
+  selected active Unit context or allowed common-area context.
+- `liff_list_maintenance_requests`: list resident-visible Maintenance Requests
+  and status history for the selected active Unit context.
+
 ## Notification Delivery Contract
 
 - Prefer LINE reply when the request has a valid reply token and the workflow can
@@ -556,17 +692,20 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
   - `import-files`: private.
   - `lease-documents`: private.
   - `move-out-evidence`: private.
+  - `maintenance-request-evidence`: private.
 - Object paths include tenant and entity scope:
   - `org/<organization_id>/condo/<condo_id>/parcels/<parcel_id>/<file_id>`.
   - `org/<organization_id>/condo/<condo_id>/announcements/<announcement_id>/<file_id>`.
   - `org/<organization_id>/condo/<condo_id>/imports/<import_batch_id>/<file_id>`.
   - `org/<organization_id>/condo/<condo_id>/units/<unit_id>/leases/<lease_id>/contract/<file_id>`.
   - `org/<organization_id>/condo/<condo_id>/units/<unit_id>/move-outs/<checklist_id>/<file_id>`.
+  - `org/<organization_id>/condo/<condo_id>/maintenance-requests/<request_id>/<file_id>`.
 - All reads use short-lived signed URLs generated server-side after authorization.
 - Allowed image MIME types: `image/jpeg`, `image/png`, `image/webp`.
 - Lease documents and move-out evidence additionally allow `application/pdf`.
 - Max image size: 10 MB for Parcel photos, 5 MB for Announcement images, 10 MB
-  for move-out evidence images, and 15 MB for lease PDFs.
+  for move-out evidence images, 10 MB for Maintenance Request evidence images,
+  and 15 MB for lease PDFs.
 - Import uploads accept UTF-8 CSV only.
 - Storage object paths are never trusted as authorization proof; table ownership
   and actor scope are checked first.
@@ -638,6 +777,8 @@ Required audited actions:
 - Import apply, stale override, and deactivation confirmation.
 - Resident or Unit Resident deactivation and LINE Binding impact summary.
 - Parcel pickup, including pickup name/note/photo path when present.
+- Maintenance Request setting changes, assignment, accept/start/resolve, uploaded
+  evidence, and close.
 
 ## Acceptance Test Matrix
 
@@ -688,6 +829,21 @@ Required audited actions:
   `sent_assumed`, individual push `sent_confirmed`, blocked skip, provider
   retry classification, non-critical `outcome_unknown` manual resend, critical
   fallback/idempotency, and per-Condo quota.
+- Billing settings validation covers rent-rule precedence, monthly due-day
+  requirement, daily rent stored without invoice conversion, utility formula
+  configuration, settings-screen preview math, rounding policy, late-fee rule
+  precedence, `grace_days = 0`, nullable `max_fee_amount`, and the absence of
+  invoice creation, meter-reading persistence, persisted charges, late-fee
+  accrual, partial payment, payment allocation, and billing LINE jobs.
+- v1.1 Maintenance Request tests cover Technician and Housekeeping Staff preset
+  defaults, assigned-only visibility, request-type restrictions, and Security
+  denied by default.
+- v1.1 Maintenance Request evidence tests cover required-photo rejection when
+  enabled, optional-photo success when disabled, per-Condo setting isolation, and
+  `maintenance_request_settings:manage` enforcement.
+- v1.1 Maintenance Request lifecycle tests cover assign, accept, start, resolve,
+  close, audit events, resident-visible status history, and internal staff notes
+  hidden from residents.
 - Storage covers unauthorized media read denial, signed URL generation after
   authorization, invalid MIME rejection, and oversized file rejection.
 - Vertical validation slice passes end to end: create Condo, import data, bind
