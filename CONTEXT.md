@@ -290,6 +290,8 @@ A private condo unit that can have one or more active Residents.
 
 Units belong to a Building and have an explicit floor value. Floors are configured as building layout data, not inferred from unit numbers.
 
+Condo setup captures the Condo profile first: name, address, province, and postal code. Floor and Unit baseline data belongs to the room-layout screen, not the Condo profile itself.
+
 ## Building
 
 A physical building inside a Condo.
@@ -365,6 +367,8 @@ Missing Import Rows are warnings or proposed changes, not automatic deactivation
 In v1, imports use CSV files. The system provides CSV templates that admins can edit externally and upload back into the system.
 
 Unit layout and resident imports use separate CSV templates in v1.
+
+The unit layout template is the import baseline for the room-layout screen only. Condo name, address, province, and postal code are required Condo setup fields outside the layout template.
 
 Admins can also add or edit units and residents directly in the web app. CSV import is a bulk workflow, not the only way to maintain data.
 

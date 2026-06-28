@@ -10,7 +10,7 @@ tests needed to build it consistently.
 
 The v1 validation slice is:
 
-1. Create Organization and Condo.
+1. Create Organization and Condo with required Condo profile fields.
 2. Import Building, Unit, Resident, and Unit Resident data.
 3. Bind a Resident to LINE through the Shared Platform LINE OA.
 4. Receive a Parcel for the Resident's Unit.
@@ -64,8 +64,13 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   - `platform_access_status` values: `allowed`, `suspended`, `cancelled`.
   - `platform_access_status` is the runtime access flag used by RLS helpers and
     Edge Functions. It is not the subscription history.
-- `condos`: `id`, `organization_id`, `name`, `status`, `line_mode`,
-  `shared_line_channel_id`, `active_at`, `platform_access_status`.
+- `condos`: `id`, `organization_id`, `name`, `address_line`, `province`,
+  `postal_code`, `status`, `line_mode`, `shared_line_channel_id`, `active_at`,
+  `platform_access_status`.
+  - Required setup fields: `name`, `address_line`, `province`, `postal_code`.
+    Condo activation is blocked until these fields are present.
+  - Building, floor, and unit baseline data belongs to the room-layout flow, not
+    the Condo profile form.
   - `status` values: `setup`, `active`, `inactive`.
   - `status` is onboarding/lifecycle state only; do not add subscription states
     such as `suspended` to it.
@@ -716,6 +721,8 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
 
 Required columns: `building`, `floor`, `unit_no`.
 
+- This template is the baseline for the room-layout screen. It does not carry
+  Condo profile fields such as Condo name, address, province, or postal code.
 - `building` and `unit_no` are trimmed and required.
 - `floor` is required and stored as configured layout text or number; do not infer
   it from `unit_no`.

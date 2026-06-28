@@ -31,7 +31,8 @@ v1 โฟกัส flow หลักสำหรับ pilot:
 ### Condo Setup
 
 - สร้าง Organization และ Condo
-- ตั้งค่า Building, Floor, Unit
+- กรอกข้อมูลคอนโดขั้นต่ำ: ชื่อคอนโด ที่อยู่ จังหวัด และรหัสไปรษณีย์
+- ตั้งค่า Building, Floor, Unit ในหน้าผังห้อง
 - สร้าง staff user แรกของคอนโด
 - seed preset roles และ permission defaults
 - สร้าง LIFF deep link / QR สำหรับแต่ละคอนโด

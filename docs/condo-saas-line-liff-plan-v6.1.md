@@ -12,7 +12,7 @@ audit, and acceptance tests.
 
 ## Key Decisions
 
-- Tenant model: `Organization` = customer/account, `Condo` = โครงการ, `Building -> floor -> Unit` เป็น layout ที่คอนโดกำหนดเอง.
+- Tenant model: `Organization` = customer/account, `Condo` = โครงการ with required setup identity/location fields; `Building -> floor -> Unit` เป็น layout ของหน้าผังห้องที่คอนโดกำหนดเอง.
 - Resident model: `Resident` เป็น organization-scoped identity; คนเดียวกันในคนละ organization เป็นคนละ record. `Unit Resident` คือความสัมพันธ์กับห้อง เช่น owner/tenant/family. Tenant lease history อยู่ใน `lease_agreements` และผูกกับ tenant `unit_residents` ไม่ใช่แค่ resident identity.
 - Staff model: v1 preset roles คือ `Condo Admin`, `Condo Manager`, `Juristic Staff`, `Security Staff`; role builder เต็ม defer หลัง v1. v1 ใช้ preset roles plus permission toggles สำหรับสิทธิ์สำคัญ. v1.1 เพิ่ม `Technician` และ `Housekeeping Staff` สำหรับงานซ่อม/ทำความสะอาดที่ถูก assign.
 - Authorization: route เป็น UX convention เท่านั้น; enforce จริงผ่าน permission checks, Edge Functions/RPC, และ Supabase RLS. Critical writes derive scope server-side เสมอ.
@@ -59,7 +59,7 @@ audit, and acceptance tests.
 
 ## Product Modules
 
-- Onboarding: create organization/condo, create buildings/floors/units, import CSV, review diff, create preset roles, configure Shared LINE OA mode, generate condo QR/LIFF links, activate condo after required checks.
+- Onboarding: create organization/condo, capture required Condo profile fields (name, address, province, postal code), create buildings/floors/units in the room-layout flow, import CSV, review diff, create preset roles, configure Shared LINE OA mode, generate condo QR/LIFF links, activate condo after required checks.
 - Admin operations: unit/resident management, preset role assignment, permission toggles, binding review, announcements, parcels, imports.
 - Platform owner operations: view tenants, suspend/reactivate access, inspect
   subscription state, review delayed usage metrics, and audit platform actions
@@ -127,6 +127,8 @@ audit, and acceptance tests.
 - Split templates:
   - `unit_layout.csv`: building, floor, unit.
   - `residents.csv`: resident identity and unit relationship.
+- `unit_layout.csv` belongs to the room-layout baseline. It does not replace the
+  required Condo profile fields captured during Condo setup.
 - Resident import cannot apply rows referencing unknown building/floor/unit. Admin must import/create layout first or resolve missing units in web flow.
 - Resident import creates residents and unit relationships only. Tenant lease rows
   are created by staff after import when the Condo uses the lease workflow.
