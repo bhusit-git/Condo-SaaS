@@ -145,6 +145,52 @@ A future billing-domain bill for utilities such as water or electricity.
 
 Utility Bills are post-v1 and may later notify residents through LINE when issued, near due date, or overdue. v1 Billing Settings may store water/electricity formula configuration and preview examples only.
 
+## Resident Billing v1.2
+
+The first resident billing phase that creates real invoices, persisted meter
+readings, invoice line items, manual payment records, and billing LINE jobs.
+
+Resident Billing v1.2 is separate from v1 billing settings and from v1.1
+Maintenance/Cleaning. It requires lease-backed occupancy context before a Condo
+can issue resident invoices.
+
+## Billing Cycle
+
+A Condo-scoped billing period used to generate resident invoices.
+
+The cycle provides `period_yyyymm`, start date, end date, and due date. Invoice
+numbers use the cycle period, not the date staff clicks issue.
+
+## Resident Invoice
+
+A collectible resident billing record for a specific Unit occupancy period.
+
+Resident Invoices must reference `condo_id`, `unit_id`, `billing_cycle_id`,
+`tenant_unit_resident_id`, `resident_id`, and `lease_agreement_id`. They must not
+be generated from only a Unit or Resident identity because the same Unit can have
+different tenants in the same billing period.
+
+When a tenant changes mid-cycle, invoices are separated by `lease_agreement_id`.
+Monthly rent is prorated by the number of days the lease overlaps the billing
+cycle.
+
+## Invoice Number
+
+A Condo-scoped human invoice identifier.
+
+In Resident Billing v1.2, invoice numbers use
+`INV-{YYYYMM}-{running_no}`, for example `INV-202606-0001`. The number is unique
+per Condo, allocated atomically when a draft invoice is issued, and derived from
+the billing cycle period. Draft invoices do not have an invoice number.
+
+## Manual Resident Payment
+
+A staff-recorded payment against a Resident Invoice.
+
+Manual Resident Payments reduce the invoice balance and are the only payment
+method in Resident Billing v1.2. Payment gateway, automatic reconciliation, tax
+invoice, accounting export, and PDF invoice generation are later phases.
+
 ## Lease Agreement
 
 A tenant contract history record for a specific tenant Unit Resident.

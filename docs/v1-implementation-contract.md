@@ -44,6 +44,10 @@ The v1 validation slice is:
   payment, late-fee accrual, payment allocation, resident billing Edge
   Functions, accounting rules, payment collection, payment gateway behavior, or
   rent/water/electricity LINE notifications.
+- Resident Billing v1.2 is the first phase that creates real resident invoices.
+  It is separate from v1 and from v1.1 Maintenance/Cleaning. It must use
+  `lease_agreements` and `tenant_unit_resident_id` as the occupancy context so
+  billing follows who actually lived in the Unit during a billing cycle.
 - Platform subscription management is only for the SaaS owner controlling whether
   an Organization or Condo may keep using the product. It must not be reused for
   resident rent, water, electricity, payment collection, or accounting workflows.
@@ -286,6 +290,54 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   - Resolution evidence belongs to the request and is read through signed URLs
     after authorization.
 
+### v1.2 Resident Billing Tables
+
+- `billing_cycles`: `id`, `organization_id`, `condo_id`, `period_yyyymm`,
+  `cycle_start_date`, `cycle_end_date`, `due_at`, `status`.
+  - Status values: `draft`, `open`, `closed`, `cancelled`.
+  - `period_yyyymm` is the source for invoice number prefixes. It is not derived
+    from the date staff clicks issue.
+- `invoice_number_sequences`: `id`, `organization_id`, `condo_id`,
+  `period_yyyymm`, `last_running_no`.
+  - Unique: `(condo_id, period_yyyymm)`.
+  - Issuing an invoice must update this row atomically so concurrent issue
+    actions cannot produce duplicate invoice numbers.
+- `resident_invoices`: `id`, `organization_id`, `condo_id`, `unit_id`,
+  `billing_cycle_id`, `tenant_unit_resident_id`, `resident_id`,
+  `lease_agreement_id`, `invoice_no`, `status`, `subtotal_amount`,
+  `late_fee_amount`, `total_amount`, `paid_amount`, `balance_amount`,
+  `issued_at`, `due_at`, `voided_at`.
+  - Unique: `(condo_id, invoice_no)` when `invoice_no` is not null.
+  - `invoice_no` is assigned only when the invoice is issued.
+  - v1.2 format is fixed to `INV-{YYYYMM}-{running_no}`, for example
+    `INV-202606-0001`. Custom formats are future scope.
+  - `lease_agreement_id` must reference a lease in the same `organization_id`,
+    `condo_id`, `unit_id`, and `tenant_unit_resident_id`.
+  - Invoice generation is blocked when the Unit has no tenant lease context for
+    the billing cycle. An invoice must never be generated from only `unit_id` or
+    `resident_id`.
+  - Status values: `draft`, `issued`, `partially_paid`, `paid`, `overdue`,
+    `void`.
+- `resident_invoice_items`: `id`, `organization_id`, `condo_id`,
+  `resident_invoice_id`, `item_type`, `description`, `quantity`, `unit_amount`,
+  `amount`, `source_json`.
+  - `item_type` values: `rent`, `water`, `electricity`, `late_fee`,
+    `adjustment`.
+  - `source_json` stores the rule, formula, reading, or staff adjustment evidence
+    used to calculate the item.
+- `meter_readings`: `id`, `organization_id`, `condo_id`, `unit_id`,
+  `billing_cycle_id`, `utility_type`, `previous_reading`, `current_reading`,
+  `usage_units`, `recorded_by_staff_id`, `recorded_at`.
+  - `utility_type` values: `water`, `electricity`.
+  - A reading used for billing must be traceable through invoice item
+    `source_json` to the invoice and lease context that consumed it.
+- `resident_payments`: `id`, `organization_id`, `condo_id`,
+  `resident_invoice_id`, `lease_agreement_id`, `tenant_unit_resident_id`,
+  `amount`, `paid_at`, `method`, `note`, `recorded_by_staff_id`.
+  - v1.2 supports manual staff-recorded payments only. Payment gateway,
+    automatic reconciliation, tax invoice, accounting export, and PDF generation
+    are outside v1.2.
+
 ### Import And Audit Tables
 
 - `import_batches`: `id`, `organization_id`, `condo_id`, `template_type`,
@@ -426,6 +478,15 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   `maintenance_requests:upload_resolution_evidence`,
   `maintenance_requests:assign`, `maintenance_requests:close`.
 - Maintenance request settings: `maintenance_request_settings:manage`.
+
+### v1.2 Resident Billing Permissions
+
+- Resident billing: `billing_cycles:write`, `meter_readings:write`,
+  `resident_invoices:generate`, `resident_invoices:issue`,
+  `resident_invoices:void`, `resident_payments:record`.
+- Condo Admin and Condo Manager receive these permissions by default. Juristic
+  Staff can receive them only by explicit grant. Security Staff, Technician, and
+  Housekeeping Staff receive no resident billing permissions by default.
 
 ### v1.1 Maintenance And Cleaning Preset Defaults
 
@@ -671,6 +732,50 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
 - `liff_list_maintenance_requests`: list resident-visible Maintenance Requests
   and status history for the selected active Unit context.
 
+### v1.2 Resident Billing Functions
+
+- `billing_create_cycle`: create a Condo billing cycle; requires
+  `billing_cycles:write`; writes audit.
+- `billing_record_meter_reading`: create or update water/electricity readings for
+  a Unit and billing cycle; requires `meter_readings:write`; writes audit.
+- `billing_generate_draft_invoices`: generate draft invoices from active tenant
+  lease overlap, rent rules, utility settings, meter readings, and late-fee
+  settings; requires `resident_invoices:generate`; writes audit.
+- `billing_issue_invoice`: validate draft totals, atomically allocate
+  `invoice_no` from `(condo_id, period_yyyymm)`, set `issued_at`, and enqueue
+  allowed billing notifications; requires `resident_invoices:issue`; writes audit.
+- `billing_void_invoice`: void an invoice that must no longer be collected;
+  requires `resident_invoices:void`; writes audit. Issued invoices are not edited
+  silently; use void plus reissue or an audited adjustment item.
+- `billing_record_manual_payment`: record a staff-confirmed manual payment,
+  update invoice paid and balance amounts, and set paid/partially-paid status;
+  requires `resident_payments:record`; writes audit.
+- `liff_list_resident_invoices`: list invoices for the selected active LIFF
+  context only.
+- `liff_get_resident_invoice`: return invoice detail only when the invoice
+  matches the server-derived active `condo_id`, `unit_id`,
+  `tenant_unit_resident_id`, and `lease_agreement_id`.
+
+### v1.2 Resident Billing Behavior
+
+- Invoice lifecycle is `draft` -> `issued` -> `partially_paid`, `paid`,
+  `overdue`, or `void`.
+- Draft invoices have no `invoice_no`, do not send LINE notifications, and are
+  not treated as collectible receivables.
+- If a Unit changes tenant during a billing cycle, v1.2 creates separate
+  invoices per `lease_agreement_id`.
+- Monthly rent is prorated by the number of days the lease overlaps the billing
+  cycle. Daily rent uses the overlapping day count directly.
+- Water and electricity items are calculated from persisted meter readings plus
+  the v1 billing utility settings. They are no longer preview-only in v1.2.
+- Late fees apply only to `issued` or `partially_paid` invoices with
+  `balance_amount > 0` after `due_at`.
+- Move-out blocks new normal-cycle invoices for the closed lease. Staff may issue
+  a final invoice only when it explicitly references the closed lease context.
+- Billing LINE jobs target only residents with an active allowed LIFF context.
+  Invoices for closed leases are staff/back-office only until a separate
+  post-move-out collection channel is defined.
+
 ## Notification Delivery Contract
 
 - Prefer LINE reply when the request has a valid reply token and the workflow can
@@ -684,6 +789,10 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
 - In v1, the notification worker supports Parcel and Announcement notification
   jobs. Billing notification jobs for rent, water, electricity, due-date
   reminders, and overdue reminders are outside v1.
+- Resident Billing v1.2 may add billing notification jobs for `invoice_issued`,
+  `due_soon`, and `overdue`, but those jobs must reuse the notification queue,
+  LINE Binding, quota, and LIFF access rules. They must not send to revoked
+  bindings or closed lease contexts.
 - Do not use LINE broadcast in SaaS v1; all recipients come from platform snapshots.
 - Shared OA messages must include Condo context in the message text.
 - Critical notifications may bypass Condo soft limits but never provider limits,
@@ -801,6 +910,9 @@ Required audited actions:
 - Parcel pickup, including pickup name/note/photo path when present.
 - Maintenance Request setting changes, assignment, accept/start/resolve, uploaded
   evidence, and close.
+- Resident Billing v1.2 actions: billing cycle create/cancel, meter reading
+  create/update, draft generation, invoice issue, invoice void, invoice
+  adjustment, invoice number allocation, and manual payment record.
 
 ## Acceptance Test Matrix
 
@@ -872,6 +984,22 @@ Required audited actions:
 - v1.1 Maintenance Request lifecycle tests cover assign, accept, start, resolve,
   close, audit events, resident-visible status history, and internal staff notes
   hidden from residents.
+- Resident Billing v1.2 tests cover invoice generation only when a matching
+  `lease_agreement_id` exists; generation from only `unit_id` or `resident_id` is
+  blocked.
+- Resident Billing v1.2 tests cover a mid-cycle tenant change by creating
+  separate invoices per lease and prorating rent by lease overlap days.
+- Resident Billing v1.2 tests cover atomic invoice numbers:
+  `INV-{YYYYMM}-{running_no}` from `billing_cycles.period_yyyymm`, unique per
+  Condo, duplicate-safe under concurrent issue, and draft invoices without
+  `invoice_no`.
+- Resident Billing v1.2 tests cover LIFF isolation: a moved-out tenant with
+  revoked LINE Binding cannot see old Unit invoices, and a new tenant cannot see
+  the prior tenant's invoice for the same Unit.
+- Resident Billing v1.2 tests cover billing notification targeting only active
+  allowed LIFF contexts, manual payment balance updates, voided invoice exclusion
+  from receivables, and overdue transitions only for issued/partially-paid
+  invoices with positive balance.
 - Storage covers unauthorized media read denial, signed URL generation after
   authorization, invalid MIME rejection, and oversized file rejection.
 - Vertical validation slice passes end to end: create Condo, import data, bind

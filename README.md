@@ -167,15 +167,25 @@ Stack ที่กำหนดไว้สำหรับ v1:
 - Condo Admin เปิด/ปิด policy รูปหลักฐานตอนปิดงานได้ต่อคอนโด
 - อนาคตค่อยเพิ่มหมวดหมู่/skill matching ให้ช่างหรือแม่บ้านเห็นงานที่ตรงประเภทและกดรับเองได้
 
-### Billing / Utility Bills
+### Resident Billing v1.2
 
-- หน้าจดมิเตอร์น้ำ/ไฟและการบันทึกหน่วยใช้งานจริง
-- แจ้งเตือนออกบิลค่าเช่า ค่าน้ำ และค่าไฟผ่าน LINE
-- แจ้งเตือนก่อนครบกำหนดชำระและแจ้งเตือนค้างชำระ
-- ให้ผู้เช่าเปิด LIFF เพื่อดูรายละเอียดยอด สถานะบิล และประวัติการแจ้งเตือน
-- ใช้ billing settings, LINE notification queue, LINE Binding, และ LIFF
-  access pattern เดิมเป็นฐาน แต่ยังไม่กำหนด payment flow, invoice lifecycle,
-  accounting rules, หรือ payment gateway ใน v1
+- เพิ่มระบบออกบิลจริงหลัง v1.1 Maintenance/Cleaning โดยยังคง v1 เดิมเป็น
+  billing settings เท่านั้น
+- บิลต้องผูกกับการอยู่อาศัยจริงผ่าน `lease_agreement_id` และ
+  `tenant_unit_resident_id` ไม่ใช่แค่ `unit_id` หรือ `resident_id`
+- รองรับ billing cycle, meter reading, invoice, invoice line items, manual
+  payment record, และสถานะบิล `draft`, `issued`, `partially_paid`, `paid`,
+  `overdue`, `void`
+- เลขบิลใช้ `invoice_no` unique ต่อ Condo ด้วยรูปแบบ v1.2
+  `INV-{YYYYMM}-{running_no}` เช่น `INV-202606-0001`; `YYYYMM` มาจาก billing
+  cycle ไม่ใช่วันที่กด issue
+- ถ้าห้องเปลี่ยนผู้เช่ากลางรอบบิล ต้องแยก invoice ตาม lease context และคิด
+  prorate ค่าเช่าตามจำนวนวันที่ lease overlap กับรอบบิล
+- LINE/LIFF ใช้เพื่อดูบิลและแจ้งเตือนเฉพาะผู้เช่าที่ยังมี active allowed
+  context; ผู้เช่าที่ย้ายออกและถูก revoke LINE Binding แล้วไม่เห็นบิลผ่าน
+  LIFF
+- v1.2 ยังไม่รวม payment gateway, PDF invoice, tax invoice, accounting export,
+  deposit settlement, post-move-out resident portal, หรือ bank reconciliation
 
 ### Multi-Site Owner / HQ
 
