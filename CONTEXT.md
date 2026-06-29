@@ -59,6 +59,44 @@ Subscription history is recorded separately from the runtime access flag used fo
 authorization. Operational writes check Organization/Condo platform access flags,
 not subscription history joins.
 
+## Commercial Package
+
+A platform-owner pricing and entitlement bundle such as Basic, Business, or
+Enterprise.
+
+Commercial Packages define SaaS limits, feature entitlement, LINE quota, add-on
+pricing, and support level. They are separate from resident billing and must not
+be reused for rent, water, electricity, resident invoices, payment collection, or
+accounting.
+
+Basic is an operations-first package for small sites with 30 included Units, 5
+Staff accounts, and no LINE/LIFF notification entitlement by default.
+
+Business is the recommended package for LINE-enabled sites once v1.1 ships, with
+100 included Units, 20 Staff accounts, Shared Platform LINE OA entitlement, and
+1,000 LINE messages per month.
+
+Enterprise is custom-priced for unlimited or contract-specific Condos, Units,
+Staff accounts, LINE quota, Custom LINE OA, Organization HQ dashboard, SLA, and
+advanced admin capabilities.
+
+Package entitlement can include a future module before that module ships. That
+entitlement only means the customer has commercial access when the module is
+released; it does not move the module into v1.0 runtime.
+
+## Package Add-On
+
+A standard commercial charge that extends Basic or Business limits.
+
+Basic extra Condos cost 199 baht per Condo per month, and Basic extra Units cost
+6 baht per Unit per month above 30 Units per Condo.
+
+Business extra Condos cost 500 baht per Condo per month, and Business extra Units
+cost 6 baht per Unit per month above 100 Units per Condo.
+
+Enterprise uses contract-specific pricing instead of the standard add-on
+schedule.
+
 ## Platform Usage Metric
 
 A delayed owner-facing snapshot of usage such as active condos, active residents,
@@ -72,7 +110,7 @@ announcement, or LINE delivery workflows.
 
 The platform-owned LINE Official Account used by multiple Condos.
 
-In phase 1, Condos can use the Shared Platform LINE OA so residents can start quickly without each Condo creating its own LINE Official Account.
+Starting in v1.1, Business and Enterprise Condos can use the Shared Platform LINE OA so residents can start quickly without each Condo creating its own LINE Official Account. v1.0 Core Backoffice does not require LINE.
 
 Residents enter a Condo context through a condo-specific LIFF deep link or QR code. A Resident may bind the same LINE account to multiple Condos through separate Condo contexts.
 
@@ -110,11 +148,11 @@ Announcement recipient snapshots are created whenever an Announcement is publish
 
 General Announcements target all active Resident roles by default. Staff may target specific resident roles, such as owners, tenants, or family members, when the message is role-specific.
 
-In v1, Announcements contain text and may include one image. LINE notifications for Announcements use short text with a LIFF link to the full Announcement.
+In v1.0, Announcements contain text and may include one image inside the backoffice. v1.1 LINE notifications for Announcements use short text with a LIFF link to the full Announcement.
 
 Incident case management is outside v1. Urgent situations in v1 are handled as Critical Announcements or Critical Notifications with reason and audit history.
 
-Publishing an Announcement and notifying residents by LINE are separate choices. Staff may publish without LINE notification, publish with normal LINE notification, or use the critical notification path for urgent messages.
+Publishing an Announcement and notifying residents by LINE are separate choices once v1.1 ships. Staff may publish without LINE notification, publish with normal LINE notification, or use the critical notification path for urgent messages.
 
 Large Announcement notifications may use LINE multicast delivery. Multicast success means LINE accepted the batch, not that every recipient definitely received the message.
 
@@ -122,7 +160,7 @@ Large Announcement notifications may use LINE multicast delivery. Multicast succ
 
 A future LINE notification for rent charges, utility bills, due-date reminders, or overdue reminders.
 
-Billing Notifications are post-v1. They are expected to reuse the platform notification queue, LINE Binding, and LIFF access pattern, but they are not committed v1 behavior.
+Billing Notifications are v1.3 behavior. They are expected to reuse the v1.1 platform notification queue, LINE Binding, and LIFF access pattern, but they are not committed v1.0 behavior.
 
 ## Billing Settings
 
@@ -137,22 +175,27 @@ notifications in v1.
 
 A future billing-domain charge for rent owed by a tenant or responsible Resident relationship.
 
-Rent Charges are post-v1 and do not define v1 invoice lifecycle, payment flow, accounting rules, payment gateway behavior, or daily-rent invoice conversion. v1 Billing Settings may store rent-rule configuration only.
+Rent Charges are v1.3 behavior and do not define v1.0 invoice lifecycle,
+payment flow, accounting rules, payment gateway behavior, or daily-rent invoice
+conversion. v1.0 Billing Settings may store rent-rule configuration only.
 
 ## Utility Bill
 
 A future billing-domain bill for utilities such as water or electricity.
 
-Utility Bills are post-v1 and may later notify residents through LINE when issued, near due date, or overdue. v1 Billing Settings may store water/electricity formula configuration and preview examples only.
+Utility Bills are v1.3 behavior and may notify residents through LINE when
+issued, near due date, or overdue after the LINE/LIFF layer exists. v1.0 Billing
+Settings may store water/electricity formula configuration and preview examples
+only.
 
-## Resident Billing v1.2
+## Resident Billing v1.3
 
 The first resident billing phase that creates real invoices, persisted meter
 readings, invoice line items, manual payment records, and billing LINE jobs.
 
-Resident Billing v1.2 is separate from v1 billing settings and from v1.1
-Maintenance/Cleaning. It requires lease-backed occupancy context before a Condo
-can issue resident invoices.
+Resident Billing v1.3 is separate from v1.0 billing settings, v1.1 LINE/LIFF,
+and v1.2 Maintenance/Cleaning. It requires lease-backed occupancy context before
+a Condo can issue resident invoices.
 
 ## Billing Cycle
 
@@ -178,7 +221,7 @@ cycle.
 
 A Condo-scoped human invoice identifier.
 
-In Resident Billing v1.2, invoice numbers use
+In Resident Billing v1.3, invoice numbers use
 `INV-{YYYYMM}-{running_no}`, for example `INV-202606-0001`. The number is unique
 per Condo, allocated atomically when a draft invoice is issued, and derived from
 the billing cycle period. Draft invoices do not have an invoice number.
@@ -188,7 +231,7 @@ the billing cycle period. Draft invoices do not have an invoice number.
 A staff-recorded payment against a Resident Invoice.
 
 Manual Resident Payments reduce the invoice balance and are the only payment
-method in Resident Billing v1.2. Payment gateway, automatic reconciliation, tax
+method in Resident Billing v1.3. Payment gateway, automatic reconciliation, tax
 invoice, accounting export, and PDF invoice generation are later phases.
 
 ## Lease Agreement
@@ -203,7 +246,8 @@ In v1, a Unit may have at most one active tenant Lease Agreement. Shared leases
 with multiple tenant participants are deferred until a later version.
 
 `ends_at` records the contract date for staff review. It does not automatically
-revoke LINE or LIFF access in v1.
+revoke access in v1.0, and does not automatically revoke LINE or LIFF access once
+v1.1 ships.
 
 Staff must explicitly close the lease or confirm move-out through a backend
 function before tenant access is revoked.
@@ -224,7 +268,8 @@ Move-out checklist statuses are not rent, utility bills, invoices, payment
 collection, or accounting records.
 
 Closing move-out ends the tenant Lease Agreement, ends the tenant Unit Resident,
-revokes the tenant LINE Binding, and writes audit in one backend transaction.
+revokes the tenant LINE Binding when v1.1 LINE/LIFF is enabled, and writes audit
+in one backend transaction.
 
 Owner and family Unit Resident access is not revoked by tenant move-out.
 
@@ -232,7 +277,7 @@ Owner and family Unit Resident access is not revoked by tenant move-out.
 
 A Condo-specific LINE Official Account connected to the platform.
 
-Custom LINE OA is a premium phase 2 capability for Condos that want their own branding and dedicated LINE channel.
+Custom LINE OA is a premium Enterprise/future capability for Condos that want their own branding and dedicated LINE channel.
 
 When a Condo moves from the Shared Platform LINE OA to a Custom LINE OA, Residents re-bind through the Custom LINE OA while keeping their existing Resident and Unit relationships.
 
@@ -268,7 +313,7 @@ In v1, Security Staff can handle parcel receiving, parcel pickup, and urgent inc
 
 ## Technician
 
-A condo-scoped v1.1 staff role responsible for assigned maintenance work.
+A condo-scoped v1.2 staff role responsible for assigned maintenance work.
 
 Technicians can see, accept, start, and resolve only Maintenance Requests assigned
 to them and categorized as maintenance work. They do not receive resident
@@ -277,7 +322,7 @@ announcement permissions by default.
 
 ## Housekeeping Staff
 
-A condo-scoped v1.1 staff role responsible for assigned cleaning work.
+A condo-scoped v1.2 staff role responsible for assigned cleaning work.
 
 Housekeeping Staff can see, accept, start, and resolve only Maintenance Requests
 assigned to them and categorized as cleaning work. They do not receive resident
@@ -294,8 +339,8 @@ Permissions are action-level capabilities, not only module-level access. For exa
 
 Preset roles are created during condo onboarding and may be cloned into custom roles later, while protected system presets remain available as defaults.
 
-Technician and Housekeeping Staff are v1.1 preset roles. Maintenance and cleaning
-operations remain outside the v1 pilot validation slice.
+Technician and Housekeeping Staff are v1.2 preset roles. Maintenance and cleaning
+operations remain outside the v1.0 Core Backoffice validation slice.
 
 Application routes are user experience conventions, not the security boundary. Authorization is based on Staff Permissions and resident relationships, and must also be enforced by backend policies and server-side functions.
 
@@ -309,7 +354,7 @@ Duplicate LINE accounts are hard-blocked when they are already bound to another 
 
 Every automatic LINE Binding records audit evidence explaining which fields matched and why the binding was accepted.
 
-In v1, automatic LINE Binding requires a unit match and exactly one normalized phone match among active Unit Residents for that Unit. Name-only matches are sent to review.
+In v1.1, automatic LINE Binding requires a unit match and exactly one normalized phone match among active Unit Residents for that Unit. Name-only matches are sent to review.
 
 Tenant LINE Binding is blocked when the Unit still has an active tenant lease or
 an active previous tenant Unit Resident that has not been closed through the
@@ -327,7 +372,7 @@ LINE Binding statuses describe actual binding attempts or historical bindings. "
 
 Superseded LINE Bindings are historical bindings that were replaced by a newer binding, such as when a Condo moves from the Shared Platform LINE OA to a Custom LINE OA.
 
-LINE Binding does not use SMS OTP in v1. When a code is needed, it is a staff-assisted verification code shown in the web app for condo staff to verify with the resident.
+LINE Binding does not use SMS OTP in v1.1. When a code is needed, it is a staff-assisted verification code shown in the web app for condo staff to verify with the resident.
 
 Staff-assisted verification codes are used for pending or uncertain binding requests, not for high-confidence automatic binding.
 
@@ -345,12 +390,13 @@ The relationship between a Resident and a Unit.
 
 Unit Residents express the resident's role for that unit, such as owner, tenant, or family member, and determine which units the Resident can access.
 
-In v1, active Unit Residents can use the core resident workflows for their unit
-regardless of whether they are owners, tenants, or family members, except that
-tenant access may also require an active Lease Agreement after lease-gated access
-is enabled for that Condo.
+In v1.0, active Unit Residents are backoffice records used by staff/admin
+workflows. Starting in v1.1, active Unit Residents can use resident LINE/LIFF
+workflows for their unit regardless of whether they are owners, tenants, or
+family members, except that tenant access may also require an active Lease
+Agreement after lease-gated access is enabled for that Condo.
 
-Resident imports create Unit Residents but do not create Lease Agreements in v1.
+Resident imports create Unit Residents but do not create Lease Agreements in v1.0.
 Existing imported tenants keep the active Unit Resident access behavior until
 staff backfills leases and enables the lease workflow for that Condo.
 
@@ -389,7 +435,7 @@ The default Parcel LINE notification setting is owner and tenant. Other supporte
 
 ## Maintenance Request
 
-A v1.1 request reported by an active Unit Resident or staff member and linked to
+A v1.2 request reported by an active Unit Resident or staff member and linked to
 the reporting Unit when the work is unit-related.
 
 Maintenance Requests may be categorized as unit-related or common-area-related,
@@ -397,14 +443,14 @@ but unit-related requests keep the reporting Unit so staff know which room
 reported the issue.
 
 Maintenance Requests use `request_type` to distinguish maintenance work from
-cleaning work. v1.1 supports `maintenance` and `cleaning`.
+cleaning work. v1.2 supports `maintenance` and `cleaning`.
 
 Repeated reports of the same issue are recorded as separate Maintenance Requests.
 
 Maintenance Request statuses are submitted, acknowledged, assigned, accepted, in
 progress, resolved, closed, rejected, and cancelled.
 
-In v1.1, an Admin, Manager, or authorized Juristic Staff member assigns the work
+In v1.2, an Admin, Manager, or authorized Juristic Staff member assigns the work
 before a Technician or Housekeeping Staff member can accept it. Category-based
 self-claim queues are a future enhancement.
 
@@ -439,9 +485,9 @@ An existing active record that is not present in an Import Batch's declared scop
 
 Missing Import Rows are warnings or proposed changes, not automatic deactivations. Deactivation requires explicit confirmation and is recorded as a reversible inactive state rather than a hard delete.
 
-In v1, imports use CSV files. The system provides CSV templates that admins can edit externally and upload back into the system.
+In v1.0, imports use CSV files. The system provides CSV templates that admins can edit externally and upload back into the system.
 
-Unit layout and resident imports use separate CSV templates in v1.
+Unit layout and resident imports use separate CSV templates in v1.0.
 
 The unit layout template is the import baseline for the room-layout screen only. Condo name, address, province, and postal code are required Condo setup fields outside the layout template.
 

@@ -1,229 +1,230 @@
-# Condo SaaS + LINE LIFF Scalable Plan v6.1
+# Condo SaaS Phase Roadmap
 
 ## Summary
 
-สร้าง Condo Management SaaS แบบ multi-tenant ด้วย `React Vite + Supabase + Edge Functions + LINE LIFF` สำหรับ `/admin`, `/staff`, `/liff`. v1 โฟกัส onboarding, CSV import, resident binding, announcements, parcels, staff permissions, minimal platform owner controls, and quota-conscious LINE notifications. Maintenance เลื่อนไป v1.1 เพื่อให้ pilot แคบและ ship ได้เร็วขึ้น. Phase 1 ใช้ Shared Platform LINE OA เป็น default; Phase 2 เพิ่ม Custom LINE OA เป็น premium upsell โดย v1 เตรียม schema ให้รองรับ แต่ไม่มี custom OA admin configuration UI, migration UI, หรือ re-bind flow เต็ม.
+สร้าง Condo Management SaaS แบบ multi-tenant ด้วย `React Vite + Supabase +
+Edge Functions` โดยเริ่มจาก v1.0 Core Backoffice ให้ระบบหลังบ้านใช้งานได้จริง
+ก่อน แล้วจึงเพิ่ม LINE/LIFF เป็น v1.1 สำหรับแพ็กเกจ Business/Enterprise.
 
 Implementation details that must not be re-decided during build live in
 [v1 Implementation Contract](v1-implementation-contract.md). This plan remains
 the product and architecture overview; the contract is the source of truth for
-schema, RLS, Edge Function contracts, auth, notification queue, storage, import,
-audit, and acceptance tests.
+schema, RLS, Edge Function contracts, auth, queues, storage, import, audit, and
+acceptance tests.
+
+## Phase Model
+
+- v1.0 Core Backoffice: `/admin`, `/staff`, onboarding, room/resident data,
+  staff auth, preset permissions, CSV import, parcels, announcements,
+  platform-owner controls, commercial package limits, billing settings, and audit.
+- v1.1 LINE + LIFF: `/liff`, Shared Platform LINE OA, LINE Binding,
+  LINE webhook, parcel/announcement/critical LINE notifications, quota, delivery
+  tracking, and LIFF resident views.
+- v1.2 Maintenance / Cleaning: Technician and Housekeeping Staff roles,
+  assigned work lifecycle, evidence policy, and resident-visible request history.
+- v1.3 Resident Billing: billing cycles, meter readings, invoices, invoice line
+  items, manual payments, billing LINE jobs, and LIFF invoice views.
+- Later phases: Custom LINE OA admin/migration UI, facility booking, visitor QR,
+  documents, full custom role builder, payment gateway, PDF/tax invoice,
+  accounting export, bank reconciliation, and post-move-out resident portal.
 
 ## Key Decisions
 
-- Tenant model: `Organization` = customer/account or owner/HQ, `Condo` = โครงการ/ที่พัก/สาขา with required setup identity/location fields; `Building -> floor -> Unit` เป็น layout ของหน้าผังห้องที่คอนโดหรือที่พักกำหนดเอง. ระบบเดียวรองรับลูกค้าที่มีหลายองค์กร หลายคอนโด/ที่พัก/สาขา และหลายตึกโดยไม่ต้องสร้าง deployment แยกต่อสถานที่.
-- Resident model: `Resident` เป็น organization-scoped identity; คนเดียวกันในคนละ organization เป็นคนละ record. `Unit Resident` คือความสัมพันธ์กับห้อง เช่น owner/tenant/family. Tenant lease history อยู่ใน `lease_agreements` และผูกกับ tenant `unit_residents` ไม่ใช่แค่ resident identity.
-- Staff model: v1 preset roles คือ `Condo Admin`, `Condo Manager`, `Juristic Staff`, `Security Staff`; role builder เต็ม defer หลัง v1. v1 ใช้ preset roles plus permission toggles สำหรับสิทธิ์สำคัญ. v1.1 เพิ่ม `Technician` และ `Housekeeping Staff` สำหรับงานซ่อม/ทำความสะอาดที่ถูก assign.
-- Authorization: route เป็น UX convention เท่านั้น; enforce จริงผ่าน permission checks, Edge Functions/RPC, และ Supabase RLS. Critical writes derive scope server-side เสมอ.
-- LINE strategy: Shared Platform LINE OA ใน v1 พร้อม condo-specific QR/LIFF deep link. Custom LINE OA เป็น phase 2; v1 เก็บ `line_channel_id`/mode เพื่อไม่ block อนาคต.
-- LINE inbound: v1 มี `line_webhook_ingest` สำหรับ verify signature, dedupe LINE events, resolve channel, capture usable reply token, and update reachable state.
-- Notifications: prefer reply when possible, individual push สำหรับ targeted events, multicast สำหรับ announcement ใหญ่, per-condo quota/usage guardrail สำหรับ Shared OA. Parcel recipients and critical fallback behavior come from Condo notification settings.
-- Platform control plane: v1 includes a minimal owner-only area at `/admin/platform` for tenant subscription state, access suspension/reactivation, and delayed global usage metrics. It is not resident rent, water, electricity, payment, or accounting billing.
-- Customer-side Owner/HQ: for accommodation businesses with multiple properties or branches, the product direction is an Organization-level overview first, then selecting the Condo/property/branch context for site-scoped operations. This customer-side Owner/HQ is distinct from the SaaS Platform Super Admin and from resident `owner`.
-- Frontend architecture: v1 uses separate React Vite apps for `admin`, `staff`, and `liff` inside one workspace. Default deploy entrypoints are path routes `/admin`, `/staff`, and `/liff`; `/admin/platform` stays inside the admin app in v1 instead of adding a fourth deployment entrypoint. The apps share intentional packages for UI primitives, design tokens, domain types, permissions, and Edge Function/RPC clients, but keep routing, auth assumptions, bundles, and UX flows separate. Feature-specific UI such as admin import diff tables, staff camera flows, platform owner views, and LIFF context switchers stays inside the owning app until reuse is proven.
-- Staff/admin auth: staff and admin users sign in with custom username + password. Usernames are globally unique across the platform and map to an internal email surrogate for Supabase Auth. v1 password recovery is Condo Admin reset; no self-service password reset in v1.
+- Tenant model: `Organization` = customer/account or owner/HQ, `Condo` =
+  โครงการ/ที่พัก/สาขา, and `Building -> Floor -> Unit` is the room layout inside
+  that Condo.
+- Resident model: `Resident` is organization-scoped. `Unit Resident` is the
+  relationship to a Unit, such as owner, tenant, or family. Tenant lease history
+  belongs to `lease_agreements`.
+- Staff model: v1.0 preset roles are `Condo Admin`, `Condo Manager`,
+  `Juristic Staff`, and `Security Staff`. v1.2 adds `Technician` and
+  `Housekeeping Staff`.
+- Authorization: routes are UX conventions only. Supabase RLS, Edge
+  Functions/RPC, and server-side permission checks are the security boundary.
+- LINE strategy: v1.0 does not require LINE. v1.1 uses Shared Platform LINE OA
+  for Business/Enterprise. Custom LINE OA remains an Enterprise/premium future
+  capability.
+- Platform control plane: v1.0 includes `/admin/platform` inside the admin app
+  for tenant subscription state, suspend/reactivate, delayed usage metrics, and
+  platform audit. It is not resident billing.
+- Commercial packaging: package, quota, add-on, and support entitlements are part
+  of the product contract from v1.0. Entitlement to a future module means the
+  customer receives access when that module ships; it does not move that module
+  into v1.0 runtime.
+- Frontend architecture: v1.0 ships `/admin` and `/staff`. v1.1 adds `/liff`.
+  `/admin/platform` stays inside `/admin` rather than becoming a fourth app.
 
-## Core Data And Flows
+## v1.0 Core Data And Flows
 
-- RLS ทุก customer-data table scope ด้วย `organization_id`, `condo_id`, `unit_id` ตาม actor membership.
+- The v1.0 validation slice is: create condo -> import unit/resident -> configure
+  staff/permissions/package state -> receive/pick up parcel -> publish
+  announcement with recipient snapshot -> verify audit/history and billing
+  settings.
+- Bootstrap/onboarding is platform-controlled in v1.0: create Organization and
+  Condo, create first Condo Admin, seed protected presets, apply package defaults,
+  create required settings, and activate only after required checks pass.
 - Platform access status is a runtime flag on Organization/Condo and is separate
-  from subscription history. Operational writes and LINE enqueue paths check this
-  flag through shared Edge Function guards and RLS helpers; they do not join
-  subscription history tables on every write.
-- The v1 validation slice is: create condo -> import unit/resident -> bind LINE -> receive parcel -> enqueue LINE notification -> resident opens LIFF to read parcel status.
-- Bootstrap/onboarding is platform-controlled in v1: seed Shared LINE channel and protected presets, create first Condo Admin, create default notification/quota settings, and activate Condo only after required checks pass.
-- Canonical v1 permissions:
+  from subscription history. Operational writes check this flag through shared
+  guards and RLS helpers.
+- Canonical v1.0 permissions:
   - Residents: `residents:read`, `residents:write`, `residents:deactivate`
-  - LINE binding: `line_bindings:read`, `line_bindings:approve`, `line_bindings:reject`
-  - Announcements: `announcements:draft`, `announcements:publish`, `announcements:notify_line`, `critical_notifications:send`
+  - Leases/move-out: `leases:read`, `leases:write`, `leases:end`,
+    `move_out_checklists:review`, `move_out_checklists:confirm`,
+    `tenant_access:revoke`
+  - Announcements: `announcements:draft`, `announcements:publish`
   - Parcels: `parcels:receive`, `parcels:pickup`, `parcels:read`
-  - Imports/settings/staff: `imports:run`, `imports:apply_deactivation`, `staff:manage`, `line_settings:manage`, `condo_settings:manage`
-  - Leases/move-out: `leases:read`, `leases:write`, `leases:end`, `move_out_checklists:review`, `move_out_checklists:confirm`, `tenant_access:revoke`
-- Preset defaults:
-  - `Condo Admin`: setup/settings/staff/LINE plus all condo operations.
-  - `Condo Manager`: residents, leases, move-out close, binding approval, announcements, parcels, and imports.
-  - `Juristic Staff`: announcements, parcels, lease read, and move-out checklist review by preset; no tenant revoke, lease close, residents/settings/staff/imports by default.
-  - `Security Staff`: parcels by preset and broad-scope critical notifications only when granted.
-  - Permission toggles may grant or remove sensitive capabilities such as `critical_notifications:send`, `line_bindings:approve`, `staff:manage`, or `line_settings:manage`. A deny override wins over grant and preset defaults. v1 does not include a full custom role builder.
-- LINE Binding:
-  - No SMS OTP in v1.
-  - Auto-bind only when `unit + normalized phone` matches exactly one active Unit Resident.
-  - Name-only, phone mismatch, or ambiguous phone goes to review.
-  - Manual review uses staff-assisted verification code shown in web app.
-  - States: `pending_review`, `code_shown`, `verified`, `bound`, `revoked`, `expired`, `rejected`, `superseded`.
-  - “Unbound” means no active binding row.
-  - Duplicate LINE account within same `line_channel_id + condo_id` for different resident is hard blocked.
-  - Same LINE account may bind to multiple condos through separate condo contexts.
-  - Tenant binding is blocked when the Unit still has an active tenant lease or an active previous tenant relationship that has not been closed through move-out.
-  - Phase 2 Custom OA re-bind creates a new binding and marks old shared-channel binding `superseded`.
+  - Imports/settings/staff: `imports:run`, `imports:apply_deactivation`,
+    `staff:manage`, `condo_settings:manage`
+- v1.1 adds LINE permissions such as `line_bindings:*`,
+  `announcements:notify_line`, `critical_notifications:send`, and
+  `line_settings:manage`.
 
 ## Product Modules
 
-- Onboarding: create organization/condo, capture required Condo profile fields (name, address, province, postal code), create buildings/floors/units in the room-layout flow, import CSV, review diff, create preset roles, configure Shared LINE OA mode, generate condo QR/LIFF links, activate condo after required checks. For dorm or accommodation language, each Condo may be presented as one property/branch and each Building as a physical building inside that property/branch.
-- Admin operations: unit/resident management, preset role assignment, permission toggles, binding review, announcements, parcels, imports.
+- Onboarding: create organization/condo, capture required Condo profile fields,
+  create buildings/floors/units, import CSV, review diff, seed presets, apply
+  package state, and activate after v1.0 checks pass.
+- Admin operations: unit/resident management, lease/move-out records, preset role
+  assignment, permission toggles, announcements, parcels, imports, settings, and
+  audit.
+- Staff mobile web: optimized `/staff` workflows for parcel receive/pickup and
+  operational staff actions.
 - Platform owner operations: view tenants, suspend/reactivate access, inspect
   subscription state, review delayed usage metrics, and audit platform actions
   from `/admin/platform`.
-- Billing settings: v1 includes configuration-only rent, utility, and late-fee
-  settings for future billing use. It does not create invoices, meter readings,
-  persisted charges, payment records, accounting entries, or billing LINE jobs.
-- Staff mobile web: optimized `/staff` workflows for parcel receive/pickup and broad-scope critical announcements.
-- Tenant & Move-In / Move-Out:
-  - `unit_residents` remains the access relationship; `lease_agreements` records
-    the tenant contract history for that relationship.
-  - v1 allows one active tenant lease per Unit. Multi-tenant lease participants
-    are post-v1.
-  - Staff creates/activates a lease after the tenant Unit Resident exists. The
-    resident CSV import does not create lease rows.
-  - Existing pilot/imported tenants keep the old active binding + active Unit
-    Resident LIFF behavior until lease rows are backfilled and lease-gated access
-    is enabled for that Condo.
-  - `ends_at` never revokes access by itself in v1. Staff must confirm move-out
-    through a backend function.
-  - Move-out checklist records status-only operational evidence for utility
-    clearance, deposit, room damage, review note, confirmer, timestamp, and files.
-    It is not a billing ledger or the full Documents module.
-  - Closing move-out ends the lease, ends the tenant Unit Resident, revokes the
-    tenant LINE Binding, and writes audit in one transaction. Owner/family access
-    remains unaffected.
-- Resident LIFF:
-  - condo-specific QR binding.
-  - context switcher when resident has multiple condos/units.
-  - announcements/read tracking.
-  - parcel status.
-  - tenant contexts in Condos with lease-gated access enabled require active
-    binding, active tenant Unit Resident, active lease, and no confirmed move-out
-    revoke.
-- Maintenance (v1.1):
-  - linked to reporting unit even for common-area category.
-  - supports `request_type = maintenance | cleaning`.
-  - repeated reports create separate requests.
-  - statuses: submitted, acknowledged, assigned, accepted, in progress, resolved, closed, rejected, cancelled.
-  - Admin/Manager/authorized Juristic Staff assign work first; Technician and
-    Housekeeping Staff see only assigned work in the first release.
-  - `resolved` means the worker finished the job; `closed` means authorized
-    staff reviewed and closed it.
-  - Condo Admin can turn required resolution evidence photos on/off per Condo;
-    default is enabled.
-  - category-based self-claim queues for workers are a future enhancement.
-  - same-unit active residents can see resident-visible request/status history.
-  - routine status changes do not push LINE; staff may explicitly notify LINE for important updates.
-- Parcels:
-  - unit-level record; optional recipient details and optional photo.
-  - pickup confirmed by staff; pickup person need not have account/binding.
-  - all active unit residents can see parcel in app.
-  - LINE notification setting default `owner_and_tenant`; options `all_active_residents`, `owner_only`, `tenant_only`, `owner_and_tenant`, `none`.
-- Announcements:
-  - targets: all condo, building, floor, unit, unit range, resident role, specific residents.
-  - recipient snapshot created on every publish, even without LINE notify.
-  - read tracking per resident recipient; staff UI may aggregate by unit.
-  - v1 content = text + optional one image.
-  - publish modes: publish only, publish + LINE notify, critical notify.
-  - full incident case management is post-v1; v1 urgent events are Critical Announcements/Notifications with reason and audit.
+- Billing settings: v1.0 includes configuration-only rent, utility, and late-fee
+  settings. It does not create invoices, meter readings, persisted charges,
+  payment records, accounting entries, or billing LINE jobs.
+- Tenant & Move-In / Move-Out: v1.0 supports one active tenant lease per Unit,
+  move-out checklist evidence, explicit staff close, and transactional lease/unit
+  resident close. `ends_at` never revokes access by itself.
+- Parcels: v1.0 stores unit-level parcel records, optional photos, staff pickup
+  confirmation, pickup name/note/photo, history, and audit. v1.1 adds resident
+  LIFF parcel views and LINE notifications.
+- Announcements: v1.0 publishes announcements inside the system and snapshots
+  recipients. v1.1 adds LINE notify and critical LINE notification paths.
+- LINE + LIFF (v1.1): condo-specific LIFF links/QR, context switching,
+  LINE Binding, webhook ingest, parcel/announcement notification, critical
+  notification, delivery tracking, and quota enforcement.
+- Maintenance (v1.2): assigned request lifecycle for maintenance/cleaning, worker
+  evidence, resident-visible history, and optional LINE notification for important
+  updates after v1.1 exists.
+- Resident Billing (v1.3): lease-backed invoice generation, invoice numbers,
+  meter readings, manual payments, billing notifications, and LIFF invoice views.
+
+## Commercial Packaging
+
+Pricing and package entitlement must be designed before implementation because
+they affect data model fields, feature flags, quotas, support level, upgrade
+paths, and platform-owner controls.
+
+Package rules:
+
+- `Basic` is an operations-first package for small sites. It does not include
+  LINE/LIFF and LINE notification entitlement by default.
+- `Business` is the recommended package for LINE-enabled sites once v1.1 ships.
+- `Enterprise` is custom-priced for organizations that need unlimited or
+  contract-specific limits, Custom LINE OA entitlement, Organization HQ
+  dashboard, SLA, and advanced admin controls.
+- Resident Billing in package copy means entitlement to the billing module once
+  v1.3 ships. v1.0 still includes only billing settings and preview math.
+
+| Feature / Limit | Basic | Business | Enterprise |
+| --- | --- | --- | --- |
+| Base price | THB 199 / month / site | THB 599 / month / site | custom |
+| Sites / Condos | 1 | 1 | unlimited / contract-specific |
+| Units per site | 30 | 100 | unlimited / contract-specific |
+| Staff accounts | 5 | 20 | unlimited / contract-specific |
+| Building / floor / unit management | included | included | included |
+| Resident management | included | included | included |
+| CSV import | included | included | included |
+| Parcel receive / pickup | included | included | included |
+| Announcements | included | included | included |
+| Preset roles and permissions | included | included | included |
+| Audit log | included | included | included |
+| Billing settings (v1.0) | included | included | included |
+| Resident Billing runtime entitlement (v1.3) | included when shipped | included when shipped | included when shipped |
+| LINE Binding + LIFF app (v1.1) | not included | included when shipped | included when shipped |
+| LINE parcel + announcement notifications (v1.1) | not included | included when shipped | included when shipped |
+| Critical LINE notifications (v1.1) | not included | included when shipped | included when shipped |
+| Monthly LINE quota | not included | 1,000 messages | unlimited / contract-specific |
+| Custom LINE OA | not included | not included | included when shipped |
+| Income / expense tracking | not included | included when shipped | included when shipped |
+| Inventory | not included | included when shipped | included when shipped |
+| Technician stock issue / Work Order | not included | included when shipped | included when shipped |
+| Maintenance Request | not included | included from v1.2 | included from v1.2 |
+| Facility Booking | not included | included when shipped | included when shipped |
+| Visitor QR | not included | included when shipped | included when shipped |
+| Custom Role Builder | not included | not included | included when shipped |
+| Documents module | not included | not included | included when shipped |
+| Organization HQ dashboard | not included | not included | included when shipped |
+| Email support | included | included | included |
+| Priority support | not included | included | included |
+| SLA + onboarding support | not included | not included | included |
+
+Add-ons:
+
+- Basic extra site: THB 199 / month / site, each extra site receives Basic
+  entitlement with 30 included units.
+- Basic extra units: THB 6 / unit / month for units above 30 per site.
+- Business extra site: THB 500 / month / site, each extra site receives Business
+  entitlement with 100 included units and LINE entitlement when v1.1 ships.
+- Business extra units: THB 6 / unit / month for units above 100 per site.
+- Enterprise has no standard add-on schedule; site, unit, LINE, SLA, support, and
+  advanced feature limits are contract-specific.
 
 ## Imports
 
-- v1 supports CSV UTF-8 only; provide downloadable templates.
-- Split templates:
-  - `unit_layout.csv`: building, floor, unit.
-  - `residents.csv`: resident identity and unit relationship.
-- `unit_layout.csv` belongs to the room-layout baseline. It does not replace the
-  required Condo profile fields captured during Condo setup.
-- Resident import cannot apply rows referencing unknown building/floor/unit. Admin must import/create layout first or resolve missing units in web flow.
-- Resident import creates residents and unit relationships only. Tenant lease rows
-  are created by staff after import when the Condo uses the lease workflow.
-- Import flow: upload -> validate -> generate diff -> admin review -> apply added/changed/deactivation separately.
-- `import_scope` declares full condo, building/floor scope, or partial update; missing rows are compared only inside scope.
+- v1.0 supports CSV UTF-8 only.
+- Split templates: `unit_layout.csv` for building/floor/unit and `residents.csv`
+  for resident identity and unit relationships.
+- Resident import cannot apply rows referencing unknown building/floor/unit.
 - Missing rows are warnings/proposed changes, never automatic deactivation.
-- Deactivation is soft delete with explicit confirm, audit, and LINE binding impact summary.
-- Web app supports direct add/edit for units/residents. Direct edits have audit; import diff detects stale CSV conflicts when uploaded rows may overwrite newer web edits.
-- Stale CSV conflicts are detected through import baseline fields and are hard-blocked by default at apply time. Admins may explicitly override affected rows or batches after reviewing the conflict, and every override is audited.
+- Deactivation is soft delete with explicit confirmation, audit, and access
+  impact summary. v1.1 adds LINE Binding impact summary when LINE is enabled.
+- Stale CSV conflicts are hard-blocked by default and require explicit audited
+  override.
 
 ## Notification Delivery
 
-- Priorities: `critical`, `operational`, `broadcast`.
-- Shared OA messages must include condo name/context.
-- Critical may bypass condo soft limits, but never bypass provider limits, platform hard caps, confirmation, audit, or role/condo rate limiting.
-- Security-sent critical messages are limited to broad scopes: all condo, building, floor.
-- Every critical notification requires a reason, explicit target scope confirmation, quota-bypass confirmation when applicable, and an audit snapshot of sender, role/permission, target scope, message, and notification id before enqueue.
-- Delivery methods:
-  - `reply`: active interaction with valid reply token.
-  - `individual push`: parcels, explicit maintenance notifications once maintenance ships, small announcements `< 20`.
-  - `multicast`: normal/broadcast announcements `>= 20`, batch max 500 recipients.
-  - no LINE broadcast in SaaS v1 because recipients must come from platform snapshots.
-- Delivery statuses:
-  - `queued`, `sending`
-  - `sent_confirmed` for individual provider acceptance
-  - `sent_assumed` for multicast batch accepted
-  - `failed_batch`, `failed_individual`
-  - `outcome_unknown` when a provider request left the platform but LINE acceptance/failure is not known
-  - `dead_letter`
-  - `skipped_no_line_binding`, `skipped_blocked_or_unknown`
-- Failure handling:
-  - permanent blocked/invalid recipient = terminal, mark unreachable and skip future sends.
-  - rate limits follow provider retry timing.
-  - confirmed transient timeout/5xx before provider dispatch retries with bounded backoff, default 3 attempts: 1m, 5m, 15m, then dead letter.
-  - `outcome_unknown` does not auto-retry for non-critical multicast/broadcast notifications; staff may manually resend from the notification record.
-  - `outcome_unknown` for critical notifications may retry or fallback to individual push when configured because missed emergency delivery is worse than rare duplicates.
-- notification jobs/deliveries use stable idempotency keys.
-- v1 notification jobs and deliveries are persisted in Postgres queue tables and processed by a scheduled Edge Function worker.
-- Platform usage metrics are delayed hourly/daily aggregates from source tables
-  such as notifications, residents, LINE bindings, and quota counters. They are
-  not maintained with per-row realtime triggers or hot-row increments during bulk
-  notification sends.
-- LINE inbound webhook events are signature-verified and deduped before any reply-token workflow or reachable-state update.
-- critical multicast may fallback to individual push after failed retry if configured; rare duplicate critical messages are acceptable compared with missed emergency delivery and must remain traceable by notification id.
+- v1.0 has backoffice announcement publishing, recipient snapshots, and audit.
+- v1.1 adds LINE delivery through reply, individual push, and multicast.
+- v1.1 persists notification jobs and deliveries in Postgres queue tables and
+  processes them with a scheduled Edge Function worker.
+- v1.1 delivery statuses distinguish delivery certainty, including
+  `sent_confirmed`, `sent_assumed`, `failed_individual`, `outcome_unknown`,
+  `dead_letter`, `skipped_no_line_binding`, and `skipped_blocked_or_unknown`.
+- No LINE broadcast in SaaS v1.1; recipients come from platform snapshots.
+- Platform usage metrics are delayed hourly/daily aggregates from source tables,
+  not per-row realtime trigger counters.
 
 ## Test Plan
 
-- Authorization/RLS: cross-condo and cross-organization denial for admin/staff/resident; frontend route bypass still blocked backend-side.
-- Resident LIFF auth boundary: `/liff` resident workflows call Edge Functions/RPC only; revoked or inactive LINE Binding cannot read resident data; multi-condo/multi-unit residents must select condo/unit context before unit-scoped workflows; `/liff` must not query customer-data tables directly through the Supabase client in v1.
-- Tenant lease boundary: lease-gated tenant LIFF contexts require active binding,
-  active tenant Unit Resident, active lease for that Unit Resident, and no
-  confirmed move-out revoke; imported tenants are not locked out before lease
-  backfill/enablement.
-- Staff/admin auth: global username uniqueness, username/password login for `/admin` and `/staff`, Condo Admin password reset, and no staff self-service password reset in v1.
-- Platform owner auth: `/admin/platform` and platform functions require
-  `app_metadata.role = "platform_super_admin"` and reject stale tokens after
-  platform access revocation.
-- Tenant suspension: suspended/cancelled Organization or Condo blocks operational
-  writes and LINE enqueue paths but still allows authorized reads and platform
-  recovery actions.
-- Bootstrap/onboarding: Shared LINE channel seeded, protected preset matrix seeded, first Condo Admin created, default notification/quota settings created, and Condo activation blocked until checks pass.
-- Permission matrix: exact preset role defaults, deny-over-grant override precedence, hidden nav behavior, critical permission alone cannot send without reason/scope confirmation/audit/rate limiting.
-- Lease/move-out permissions: Admin/Manager can manage and close tenant move-out;
-  Juristic Staff can read/review only by default; Security Staff has no default
-  lease or revoke permissions.
-- Tenant turnover: one active tenant lease per Unit, no automatic revoke from
-  `ends_at`, transactional move-out close, new tenant binding blocked until the
-  old tenant is closed, new tenant bind allowed after close, owner/family access
-  preserved.
-- LINE binding: normalized phone formats, exactly-one active candidate auto-bind, name-only review, ambiguous review, inactive reject, duplicate same-condo hard block, multi-condo same LINE allow, phase-2 supersede semantics.
-- LINE webhook: signature verification, event dedupe, same-channel/user reply token handling, and reachable-state update for blocked/unreachable users.
-- Import: CSV validation, unknown unit references block apply, layout dependency before resident apply, scoped diff, partial import warning, stale CSV conflict block using baseline fields, explicit stale override apply + audit, idempotent retry, explicit deactivation confirm and audit.
-- Notifications: reply preferred, parcel recipient settings from Condo notification settings, publish-only snapshots recipients, multicast accepted records `sent_assumed`, individual push accepted records `sent_confirmed`, unknown provider outcome records `outcome_unknown`, non-critical multicast `outcome_unknown` no auto-retry, critical `outcome_unknown` may retry/fallback with traceable notification id, retry classification, blocked skip, per-condo quota, critical fallback idempotency.
-- Parcels: create without photo, optional photo capture, staff pickup with pickup name/note/photo, resident visibility by unit.
-- Frontend boundaries: `admin`, `staff`, and `liff` build separately; LIFF bundle does not include admin-only import/table flows; app-specific feature components stay inside the owning app.
+- v1.0: authorization/RLS, staff/admin auth, platform owner auth, tenant
+  suspension, bootstrap, permission matrix, import, parcels, announcements,
+  lease/move-out, billing settings, audit, and frontend boundaries for `/admin`
+  and `/staff`.
+- v1.1: LIFF auth boundary, LINE Binding, LINE webhook, LINE notification
+  delivery, quota, unreachable-state handling, and `/liff` frontend boundaries.
+- v1.2: Maintenance/Cleaning roles, assignment lifecycle, evidence policy,
+  resident-visible status history, and audit.
+- v1.3: Resident billing generation, invoice numbers, mid-cycle tenant changes,
+  LIFF isolation, manual payment balance updates, voiding, overdue transitions,
+  and billing notification targeting.
 
 ## Assumptions
 
-- v1 uses Supabase Auth/session for staff/admin with custom username + password, globally unique usernames, and internal email surrogate mapping. Resident LIFF uses verified LIFF identity, but resident customer-data access goes through Edge Functions/RPC only; Edge Functions resolve actor and scope server-side from active LINE Binding and selected condo/unit context.
-- Shared Platform LINE OA is default for phase 1.
-- Custom LINE OA is schema-ready in v1 but productized in phase 2. v1 has no custom OA admin configuration UI, migration UI, or re-bind flow.
-- CSV is the only bulk import format in v1.
-- SaaS owner subscription management is minimal v1 control-plane behavior. It
-  controls tenant access and metrics only; invoice lifecycle, payment collection,
-  accounting rules, meter-reading persistence, persisted charges, and resident
-  utility/rent billing remain outside v1.
-- Maintenance and cleaning requests with Technician and Housekeeping Staff roles
-  are v1.1 scoped capabilities, not v1 pilot behavior. Resident billing,
-  facility booking, visitor QR, documents, full incident case management,
-  contacts, full custom role builder, and staff self-service password reset
-  remain post-v1 unless pilot demands them.
-- Billing / Utility Bills LINE notifications for rent charges, water charges, electricity charges, due-date reminders, and overdue reminders are post-v1. They should reuse the v1 LINE notification queue, LINE Binding, and LIFF access patterns, but require a separate billing runtime contract before implementation.
+- v1.0 uses Supabase Auth/session for staff/admin with custom username +
+  password, globally unique usernames, and internal email surrogate mapping.
+- v1.0 has no public self-signup for Organizations or Condos.
+- v1.1 Shared Platform LINE OA is the default LINE mode for Business/Enterprise.
+- Custom LINE OA is schema-ready but not productized until a later
+  Enterprise/premium phase.
+- CSV is the only bulk import format in v1.0.
+- SaaS owner subscription management controls platform access and metrics only;
+  resident billing and accounting remain separate.
 - Lease contract files and move-out checklist evidence are limited operational
-  evidence files in v1, not the full Documents module.
+  evidence files, not the full Documents module.
 
 ## Related Docs
 

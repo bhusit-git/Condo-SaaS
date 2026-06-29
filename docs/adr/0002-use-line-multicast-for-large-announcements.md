@@ -18,11 +18,17 @@ Use LINE reply messages whenever an active resident interaction can be answered 
 
 Use individual push for parcels, explicit maintenance notifications once maintenance ships, and small announcement recipient sets.
 
-Use LINE multicast for large normal or broadcast announcement recipient sets. Do not use LINE broadcast for SaaS v1 because condo targeting must come from platform recipient snapshots.
+Use LINE multicast for large normal or broadcast announcement recipient sets
+starting in v1.1. Do not use LINE broadcast for SaaS v1.1 because condo targeting
+must come from platform recipient snapshots.
 
 For critical announcements, multicast may be attempted first for speed. If the batch fails and the error is retryable, retry according to delivery policy; if still unsuccessful, fall back to individual push when configured for critical delivery. When the platform cannot tell whether LINE accepted a provider request, the delivery is marked `outcome_unknown`; non-critical multicast is not retried automatically, while critical delivery may retry or fallback because missed emergency delivery is worse than rare duplicates.
 
-v1 persists notification jobs and deliveries in Postgres-backed queue tables and processes them with a scheduled Edge Function worker. The implementation contract for job states, delivery states, idempotency keys, quota counters, retry classification, and manual resend is defined in [v1 Implementation Contract](../v1-implementation-contract.md).
+v1.1 persists LINE notification jobs and deliveries in Postgres-backed queue
+tables and processes them with a scheduled Edge Function worker. The
+implementation contract for job states, delivery states, idempotency keys, quota
+counters, retry classification, and manual resend is defined in
+[v1 Implementation Contract](../v1-implementation-contract.md).
 
 ## Consequences
 

@@ -1,57 +1,68 @@
-# Condo SaaS v1 Implementation Contract
+# Condo SaaS v1.0 Core Backoffice Implementation Contract
 
 ## Purpose
 
-This document is the implementation source of truth for Condo SaaS v1.
+This document is the implementation source of truth for Condo SaaS v1.0 Core
+Backoffice.
 The product plan and ADRs explain why the system exists; this contract defines
 the minimum data model, authorization boundary, Edge Function surface, storage
 rules, notification worker behavior, import semantics, audit requirements, and
 tests needed to build it consistently.
 
-The v1 validation slice is:
+The v1.0 validation slice is:
 
 1. Create Organization and Condo with required Condo profile fields.
 2. Import Building, Unit, Resident, and Unit Resident data.
-3. Bind a Resident to LINE through the Shared Platform LINE OA.
-4. Receive a Parcel for the Resident's Unit.
-5. Enqueue and deliver the Parcel LINE notification.
-6. Let the Resident open LIFF and read the Parcel status.
+3. Configure package/subscription state, staff, preset roles, and permissions.
+4. Receive and pick up a Parcel for a Resident's Unit through `/staff`.
+5. Publish an Announcement inside the backoffice and snapshot recipients.
+6. Verify audit, import history, parcel history, and billing settings.
 
 ## Core Defaults
 
-- Stack: React Vite apps for `/admin`, `/staff`, and `/liff`; Supabase Postgres,
-  Auth, Storage, and Edge Functions; LINE LIFF and Messaging API.
-- v1 LINE mode: Shared Platform LINE OA by default. Custom LINE OA fields are
-  schema-ready only; no Custom OA admin setup, migration UI, or full re-bind flow
-  ships in v1.
+- Stack: React Vite apps for `/admin` and `/staff`; Supabase Postgres, Auth,
+  Storage, and Edge Functions.
+- LINE/LIFF is not v1.0 runtime behavior. v1.1 adds `/liff`, Shared Platform
+  LINE OA, LINE webhook, LINE Binding, and LINE notification delivery for
+  Business/Enterprise entitlements.
+- Custom LINE OA fields are schema-ready only; no Custom OA admin setup,
+  migration UI, or full re-bind flow ships in v1.0 or v1.1 unless scope is
+  explicitly reopened.
 - Staff/admin auth: Supabase Auth session with a globally unique username mapped
   to an internal email surrogate.
-- Resident LIFF auth: LIFF identity is verified server-side. LIFF workflows do
-  not query customer-data tables directly from the frontend in v1.
+- Resident LIFF auth starts in v1.1. When introduced, LIFF identity is verified
+  server-side and LIFF workflows do not query customer-data tables directly from
+  the frontend.
 - Notification queue: Postgres-backed queue tables processed by a scheduled Edge
   Function worker.
-- Platform control plane: v1 includes a minimal owner-only area under
+- Platform control plane: v1.0 includes a minimal owner-only area under
   `/admin/platform` for tenant access status, subscription state, and delayed
-  usage metrics. It does not add a separate frontend entrypoint in v1.
+  usage metrics. It does not add a separate frontend entrypoint in v1.0.
+- LINE/LIFF capabilities are v1.1 scoped capabilities, not v1.0 Core Backoffice
+  behavior.
 - Maintenance and cleaning requests with Technician and Housekeeping Staff roles
-  are v1.1 scoped capabilities, not v1 pilot behavior. Resident billing,
+  are v1.2 scoped capabilities, not v1.0 Core Backoffice behavior. Resident billing,
   facility booking, visitor QR, documents, contacts, full incident case
   management, full custom role builder, and staff self-service password reset are
-  out of v1 unless a pilot explicitly reopens scope.
-- v1 scope is reopened only for billing settings configuration. v1 may store
+  out of v1.0 unless a pilot explicitly reopens scope.
+- v1.0 scope is reopened only for billing settings configuration. v1.0 may store
   Condo-scoped rent, utility, and late-fee settings for future billing use, but
   it does not define invoice creation, bill due-date calculation, partial
   payment, late-fee accrual, payment allocation, resident billing Edge
   Functions, accounting rules, payment collection, payment gateway behavior, or
   rent/water/electricity LINE notifications.
-- Resident Billing v1.2 is the first phase that creates real resident invoices.
-  It is separate from v1 and from v1.1 Maintenance/Cleaning. It must use
+- Resident Billing v1.3 is the first phase that creates real resident invoices.
+  It is separate from v1.0, v1.1 LINE/LIFF, and v1.2 Maintenance/Cleaning. It must use
   `lease_agreements` and `tenant_unit_resident_id` as the occupancy context so
   billing follows who actually lived in the Unit during a billing cycle.
 - Platform subscription management is only for the SaaS owner controlling whether
   an Organization or Condo may keep using the product. It must not be reused for
   resident rent, water, electricity, payment collection, or accounting workflows.
-- Lease contract files and move-out checklist evidence in v1 are limited
+- Commercial package entitlement is part of the platform contract from v1.0 so the
+  implementation does not need to retrofit pricing, quota, add-on, or support-tier
+  logic later. Entitlement can reference future modules, but it must not make those
+  modules v1.0 runtime behavior before their phase ships.
+- Lease contract files and move-out checklist evidence in v1.0 are limited
   operational evidence files for tenant turnover. They are not the full Documents
   module and do not create a resident billing ledger.
 
@@ -75,7 +86,7 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   `platform_access_status`.
   - In dorm, apartment, or small-accommodation language, a Condo may be presented
     as one property, accommodation site, or branch. Do not add a separate `branch`
-    table in v1 unless scope is explicitly reopened.
+    table in v1.0 unless scope is explicitly reopened.
   - Required setup fields: `name`, `address_line`, `province`, `postal_code`.
     Condo activation is blocked until these fields are present.
   - Building, floor, and unit baseline data belongs to the room-layout flow, not
@@ -86,14 +97,17 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   - `platform_access_status` values: `allowed`, `suspended`, `cancelled`.
   - Effective Condo access is allowed only when both the Organization and Condo
     platform access statuses are `allowed`.
-  - `line_mode` values: `shared`, `custom_pending`, `custom`.
-  - v1 creates `shared`; `custom_*` exists for future compatibility only.
+  - `line_mode` values: `none`, `shared`, `custom_pending`, `custom`.
+  - v1.0 creates `none` unless a migration/backfill explicitly enables v1.1
+    LINE/LIFF entitlement. `shared` starts in v1.1; `custom_*` exists for future
+    compatibility only.
 - `tenant_subscriptions`: `id`, `organization_id`, `condo_id`, `status`,
   `plan_code`, `billing_period_start`, `billing_period_end`, `trial_ends_at`,
   `suspend_reason`, `cancelled_at`.
   - `condo_id` is nullable only when the subscription applies to the whole
     Organization.
   - `status` values: `trialing`, `active`, `past_due`, `suspended`, `cancelled`.
+  - `plan_code` values: `basic`, `business`, `enterprise`.
   - This table records business state and history for the SaaS owner. RLS
     policies and high-frequency operational writes must not join this table.
   - Suspend/reactivate/cancel operations update `tenant_subscriptions` and the
@@ -103,8 +117,9 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   `critical_soft_limit_bypass_enabled`.
   - `parcel_line_recipient_policy` values: `owner_and_tenant`,
     `all_active_residents`, `owner_only`, `tenant_only`, `none`.
-  - Default Parcel LINE policy is `owner_and_tenant`.
-  - Critical fallback is enabled by default for Shared Platform LINE OA v1.
+  - Default Parcel LINE policy for v1.1 LINE/LIFF is `owner_and_tenant`.
+  - Critical fallback is enabled by default for Shared Platform LINE OA once
+    v1.1 LINE/LIFF is enabled.
 - `condo_quota_settings`: `id`, `organization_id`, `condo_id`,
   `line_channel_id`, `priority`, `period`, `soft_limit`, `hard_limit`.
   - `period` values: `day`, `month`.
@@ -120,13 +135,13 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   - `cadence` values: `monthly`, `daily`. Each Unit has only one effective rent
     cadence.
   - `monthly_due_day` is required only for monthly rent rules.
-  - Daily rent cadence is stored for future billing use only. v1 does not define
+  - Daily rent cadence is stored for future billing use only. v1.0 does not define
     how daily rent is converted into invoice line items.
 - `billing_utility_settings`: `id`, `organization_id`, `condo_id`,
   `utility_type`, `formula`, `unit_rate`, `flat_amount`, `minimum_amount`,
   `minimum_units`, `included_minimum_amount`, `included_minimum_units`,
   `rounding_policy`, `status`.
-  - This is Condo default configuration only; v1 does not support per-floor or
+  - This is Condo default configuration only; v1.0 does not support per-floor or
     per-unit utility overrides.
   - `utility_type` values: `water`, `electricity`.
   - `formula` values:
@@ -142,21 +157,21 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
     unit_rate`.
   - `rounding_policy` values: `whole_baht`, `two_decimals`.
   - Preview/example math in the settings UI is allowed. Persisted meter readings,
-    charges, invoices, and utility bill line items are not v1 behavior.
+    charges, invoices, and utility bill line items are not v1.0 behavior.
 - `billing_late_fee_rules`: `id`, `organization_id`, `condo_id`, `scope_type`,
   `scope_json`, `mode`, `amount`, `grace_days`, `max_fee_amount`, `applies_to`,
   `status`.
   - This is billing settings metadata only. It must not create late-fee charges,
-    invoice adjustments, receivables, or payment expectations in v1.
+    invoice adjustments, receivables, or payment expectations in v1.0.
   - `scope_type` values: `all_units`, `floor`, `unit_list`.
   - Effective rule precedence is most specific wins: Unit list, then Floor, then
     All Units.
   - `mode` values: `none`, `fixed_once`, `fixed_per_day`.
   - `grace_days` defaults to `0`.
-  - `applies_to` is fixed to `future_invoice` in v1 and is metadata only.
+  - `applies_to` is fixed to `future_invoice` in v1.0 and is metadata only.
   - `max_fee_amount` is nullable metadata reserved for a future invoice-level cap.
-    v1 stores it but does not enforce it.
-  - v1 does not support percentage fee, compounding fee, multi-step late-fee
+    v1.0 stores it but does not enforce it.
+  - v1.0 does not support percentage fee, compounding fee, multi-step late-fee
     formulas, late-fee accrual, partial payment, or payment allocation.
 - `buildings`: `id`, `organization_id`, `condo_id`, `name`, `status`.
   - Unique active building name per Condo.
@@ -188,8 +203,8 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   - `owner_unit_resident_id` is nullable. When present, it must reference an
     owner `unit_residents` row in the same `organization_id`, `condo_id`, and
     `unit_id`.
-  - A Unit may have at most one active tenant lease in v1.
-  - `ends_at` is contract information for staff review only. v1 does not revoke
+  - A Unit may have at most one active tenant lease in v1.0.
+  - `ends_at` is contract information for staff review only. v1.0 does not revoke
     tenant access from `ends_at` alone.
 - `move_out_checklists`: `id`, `organization_id`, `condo_id`, `unit_id`,
   `lease_agreement_id`, `tenant_unit_resident_id`, `utilities_status`,
@@ -212,18 +227,18 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   `preset_role`, `status`.
   - `preset_role` values: `condo_admin`, `condo_manager`, `juristic_staff`,
     `security_staff`.
-  - v1.1 adds `technician` and `housekeeping_staff`.
+  - v1.2 adds `technician` and `housekeeping_staff`.
 - `staff_permission_overrides`: `id`, `organization_id`, `condo_id`,
   `staff_membership_id`, `permission`, `effect`.
   - `effect` values: `grant`, `deny`.
   - Effective permissions are preset permissions plus overrides.
   - Precedence is `deny` override, then `grant` override, then preset default.
 
-### LINE Binding Tables
+### v1.1 LINE Binding Tables
 
 - `line_channels`: `id`, `mode`, `line_channel_id`, `line_liff_id`, `status`.
   - `mode` values: `shared`, `custom`.
-  - Shared Platform LINE OA is seeded once.
+  - Shared Platform LINE OA is seeded when v1.1 LINE/LIFF is enabled.
 - `line_webhook_events`: `id`, `line_channel_id`, `line_event_id`,
   `line_user_id`, `event_type`, `reply_token`, `payload_json`, `received_at`,
   `processed_at`, `status`.
@@ -260,7 +275,7 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   `announcement_id`, `resident_id`, `unit_id`, `read_at`.
   - Recipients are snapshotted at publish time even when LINE notification is not sent.
 
-### v1.1 Maintenance And Cleaning Tables
+### v1.2 Maintenance And Cleaning Tables
 
 - `maintenance_request_settings`: `id`, `organization_id`, `condo_id`,
   `completion_evidence_photo_required`.
@@ -280,7 +295,7 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   `maintenance_request_id`, `assigned_staff_membership_id`,
   `assigned_by_staff_id`, `assigned_at`, `accepted_at`, `started_at`,
   `resolved_at`.
-  - v1.1 requires an assignment before a Technician or Housekeeping Staff member
+  - v1.2 requires an assignment before a Technician or Housekeeping Staff member
     can accept work.
   - Technician assignments are valid only for `request_type = maintenance`.
   - Housekeeping Staff assignments are valid only for `request_type = cleaning`.
@@ -290,7 +305,7 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   - Resolution evidence belongs to the request and is read through signed URLs
     after authorization.
 
-### v1.2 Resident Billing Tables
+### v1.3 Resident Billing Tables
 
 - `billing_cycles`: `id`, `organization_id`, `condo_id`, `period_yyyymm`,
   `cycle_start_date`, `cycle_end_date`, `due_at`, `status`.
@@ -309,7 +324,7 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   `issued_at`, `due_at`, `voided_at`.
   - Unique: `(condo_id, invoice_no)` when `invoice_no` is not null.
   - `invoice_no` is assigned only when the invoice is issued.
-  - v1.2 format is fixed to `INV-{YYYYMM}-{running_no}`, for example
+  - v1.3 format is fixed to `INV-{YYYYMM}-{running_no}`, for example
     `INV-202606-0001`. Custom formats are future scope.
   - `lease_agreement_id` must reference a lease in the same `organization_id`,
     `condo_id`, `unit_id`, and `tenant_unit_resident_id`.
@@ -334,9 +349,9 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 - `resident_payments`: `id`, `organization_id`, `condo_id`,
   `resident_invoice_id`, `lease_agreement_id`, `tenant_unit_resident_id`,
   `amount`, `paid_at`, `method`, `note`, `recorded_by_staff_id`.
-  - v1.2 supports manual staff-recorded payments only. Payment gateway,
+  - v1.3 supports manual staff-recorded payments only. Payment gateway,
     automatic reconciliation, tax invoice, accounting export, and PDF generation
-    are outside v1.2.
+    are outside v1.3.
 
 ### Import And Audit Tables
 
@@ -397,29 +412,107 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   - Source tables remain the authority for live operational state; this table is
     delayed analytics for the platform owner.
 
+## Commercial Package Contract
+
+Package rules are commercial entitlement rules, not resident billing rules.
+Platform subscription management controls SaaS access and limits only; it must
+not be reused for resident invoices, rent, utilities, payment collection, or
+accounting.
+
+Package and add-on logic must be represented in the platform-owner layer before
+tenant rollout because it controls quota, feature visibility, upsell, and
+suspension behavior. Future-phase entitlements are allowed in the package table, but
+runtime access remains blocked until the relevant module exists and is enabled.
+
+### Package Matrix
+
+| Feature / Limit | Basic | Business | Enterprise |
+| --- | --- | --- | --- |
+| `plan_code` | `basic` | `business` | `enterprise` |
+| Base price | THB 199 / month / Condo | THB 599 / month / Condo | custom |
+| Included Condos | 1 | 1 | unlimited / contract-specific |
+| Included Units per Condo | 30 | 100 | unlimited / contract-specific |
+| Included Staff accounts | 5 | 20 | unlimited / contract-specific |
+| Building / floor / unit management | enabled | enabled | enabled |
+| Resident management | enabled | enabled | enabled |
+| CSV import | enabled | enabled | enabled |
+| Parcel receive / pickup | enabled | enabled | enabled |
+| Announcements | enabled | enabled | enabled |
+| Preset roles and permission toggles | enabled | enabled | enabled |
+| Audit log | enabled | enabled | enabled |
+| Billing settings (v1.0) | enabled | enabled | enabled |
+| Resident Billing runtime entitlement (v1.3) | entitlement when shipped | entitlement when shipped | entitlement when shipped |
+| LINE Binding + LIFF app (v1.1) | disabled | entitlement when shipped | entitlement when shipped |
+| LINE parcel + announcement notifications (v1.1) | disabled | entitlement when shipped | entitlement when shipped |
+| Critical LINE notifications (v1.1) | disabled | entitlement when shipped | entitlement when shipped |
+| Monthly LINE quota | none | 1,000 messages | unlimited / contract-specific |
+| Custom LINE OA | disabled | disabled | enabled |
+| Income / expense tracking | disabled | entitlement when shipped | entitlement when shipped |
+| Inventory | disabled | entitlement when shipped | entitlement when shipped |
+| Technician stock issue / Work Order | disabled | entitlement when shipped | entitlement when shipped |
+| Maintenance Request | disabled | entitlement from v1.2 | entitlement from v1.2 |
+| Facility Booking | disabled | entitlement when shipped | entitlement when shipped |
+| Visitor QR | disabled | entitlement when shipped | entitlement when shipped |
+| Custom Role Builder | disabled | disabled | entitlement when shipped |
+| Documents module | disabled | disabled | entitlement when shipped |
+| Organization HQ dashboard | disabled | disabled | entitlement when shipped |
+| Email support | included | included | included |
+| Priority support | not included | included | included |
+| SLA + onboarding support | not included | not included | included |
+
+### Add-On Rules
+
+- Basic extra Condo/site: THB 199 / month / Condo. Each extra Condo receives
+  Basic entitlement with 30 included Units.
+- Basic extra Units: THB 6 / Unit / month for Units above 30 per Condo.
+- Business extra Condo/site: THB 500 / month / Condo. Each extra Condo receives
+  Business entitlement with 100 included Units and LINE entitlement.
+- Business extra Units: THB 6 / Unit / month for Units above 100 per Condo.
+- Enterprise has no standard add-on calculation. Condos, Units, Staff accounts,
+  LINE quota, SLA, support, and advanced feature limits are defined in the
+  customer contract.
+
+### Entitlement Enforcement
+
+- Platform-owner functions must treat `tenant_subscriptions.plan_code`,
+  Organization/Condo platform access flags, and package limit calculations as
+  platform configuration. Operational writes may use cached/derived entitlement
+  checks but must not join subscription history on every customer-data write.
+- Basic tenants must not enqueue LINE notifications or expose LINE/LIFF binding
+  surfaces unless a paid upgrade, trial override, or explicit platform-owner
+  entitlement is active after v1.1 ships.
+- Business tenants can use Shared Platform LINE OA with the configured monthly
+  quota after v1.1 ships. Critical notifications may bypass soft limits only
+  under the existing critical-notification confirmation and hard-limit rules.
+- Enterprise tenants may receive Custom LINE OA and unlimited quotas only as
+  contract-specific entitlements; provider limits and platform safety caps still
+  apply.
+- Resident Billing package entitlement does not override phase scope. v1.0 stores
+  billing settings only; v1.3 is required before invoices, meter readings,
+  payments, billing LINE jobs, or LIFF invoice views become runtime behavior.
+
 ## Bootstrap And Onboarding Contract
 
 - Platform bootstrap is performed by a service-role seed script or platform admin
   function, not by an unauthenticated public route.
-- Bootstrap seeds the Shared Platform LINE channel, protected preset permission
-  matrix, default quota settings, storage buckets, and required scheduled worker
-  configuration.
-- Creating a pilot Condo requires a platform actor. v1 does not add
+- Bootstrap seeds the protected preset permission matrix, package defaults,
+  storage buckets, and required scheduled worker configuration. Shared Platform
+  LINE channel references and LINE quota defaults are seeded only when v1.1
+  LINE/LIFF is enabled.
+- Creating a pilot Condo requires a platform actor. v1.0 does not add
   Organization-scoped staff membership.
 - The data model supports one Organization with multiple Condos/properties/branches
   and each Condo with multiple Buildings. Customer-side Owner/HQ overview and
   Organization-scoped staff membership are product directions for multi-site
-  customers, but they are not part of the v1 validation slice unless scope is
+  customers, but they are not part of the v1.0 validation slice unless scope is
   explicitly reopened.
 - `platform_create_condo` creates the Organization when needed, creates the Condo
-  in `setup` status, attaches the Shared Platform LINE channel, creates default
-  `condo_notification_settings` and `condo_quota_settings`, creates the first
-  Condo Admin staff user, assigns preset permissions, and writes audit events.
+  in `setup` status, creates the first Condo Admin staff user, assigns preset
+  permissions, applies package defaults, and writes audit events.
 - Condo activation sets `condos.active_at` only after required checks pass:
-  at least one active Condo Admin, Shared LINE channel attached, default
-  notification settings present, at least one active Building and Unit, and LIFF
-  deep-link/QR context generated.
-- v1 does not expose public self-signup for Organizations or Condos.
+  at least one active Condo Admin, package/subscription state present, at least
+  one active Building and Unit, and required v1.0 settings present.
+- v1.0 does not expose public self-signup for Organizations or Condos.
 
 ## Authorization And RLS Contract
 
@@ -447,30 +540,36 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 - Critical writes derive target scope server-side. The frontend may submit an
   intended scope, but the server validates role, permission, condo, and allowed
   scope before enqueue.
-- Every staff Edge Function that mutates customer data or enqueues LINE
-  notifications must call a shared `assert_condo_platform_active(condo_id)` guard
-  before writing. RLS is a safety net, not the only suspend enforcement layer.
+- Every staff Edge Function that mutates customer data must call a shared
+  `assert_condo_platform_active(condo_id)` guard before writing. v1.1 LINE
+  enqueue paths must call the same guard before enqueue. RLS is a safety net, not
+  the only suspend enforcement layer.
 - Staff permission checks use effective permissions, not route or nav visibility.
-- LIFF frontend never uses the anon Supabase client to query customer-data tables.
-  It calls Edge Functions/RPC that verify LIFF identity and derive scope.
+- v1.1 LIFF frontend must never use the anon Supabase client to query
+  customer-data tables. It calls Edge Functions/RPC that verify LIFF identity and
+  derive scope.
 
-### Canonical v1 Permissions
+### Canonical v1.0 Permissions
 
 - Residents: `residents:read`, `residents:write`, `residents:deactivate`.
 - Leases: `leases:read`, `leases:write`, `leases:end`.
 - Move-out: `move_out_checklists:review`, `move_out_checklists:confirm`,
   `tenant_access:revoke`.
-- LINE binding: `line_bindings:read`, `line_bindings:approve`,
-  `line_bindings:reject`.
-- Announcements: `announcements:draft`, `announcements:publish`,
-  `announcements:notify_line`, `critical_notifications:send`.
+- Announcements: `announcements:draft`, `announcements:publish`.
 - Parcels: `parcels:receive`, `parcels:pickup`, `parcels:read`.
 - Imports/settings/staff: `imports:run`, `imports:apply_deactivation`,
-  `staff:manage`, `line_settings:manage`, `condo_settings:manage`.
-  - Billing settings are managed through `condo_settings:manage`; v1 does not add
+  `staff:manage`, `condo_settings:manage`.
+  - Billing settings are managed through `condo_settings:manage`; v1.0 does not add
     resident billing permissions.
 
-### v1.1 Maintenance And Cleaning Permissions
+### v1.1 LINE And LIFF Permissions
+
+- LINE binding: `line_bindings:read`, `line_bindings:approve`,
+  `line_bindings:reject`.
+- LINE notifications: `announcements:notify_line`, `critical_notifications:send`.
+- LINE settings: `line_settings:manage`.
+
+### v1.2 Maintenance And Cleaning Permissions
 
 - Maintenance requests: `maintenance_requests:read_all`,
   `maintenance_requests:read_assigned`, `maintenance_requests:accept_assigned`,
@@ -479,7 +578,7 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   `maintenance_requests:assign`, `maintenance_requests:close`.
 - Maintenance request settings: `maintenance_request_settings:manage`.
 
-### v1.2 Resident Billing Permissions
+### v1.3 Resident Billing Permissions
 
 - Resident billing: `billing_cycles:write`, `meter_readings:write`,
   `resident_invoices:generate`, `resident_invoices:issue`,
@@ -488,7 +587,7 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
   Staff can receive them only by explicit grant. Security Staff, Technician, and
   Housekeeping Staff receive no resident billing permissions by default.
 
-### v1.1 Maintenance And Cleaning Preset Defaults
+### v1.2 Maintenance And Cleaning Preset Defaults
 
 | Permission | Condo Admin | Condo Manager | Juristic Staff | Security Staff | Technician | Housekeeping Staff |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -504,7 +603,7 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 
 - Technician defaults apply only to assigned `maintenance` requests.
 - Housekeeping Staff defaults apply only to assigned `cleaning` requests.
-- v1.1 does not include worker self-claim queues. Category or skill matching for
+- v1.2 does not include worker self-claim queues. Category or skill matching for
   workers to see and claim unassigned work is a future enhancement.
 
 ### Preset Permission Matrix
@@ -520,53 +619,51 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 | `move_out_checklists:review` | yes | yes | yes | no |
 | `move_out_checklists:confirm` | yes | yes | no | no |
 | `tenant_access:revoke` | yes | yes | no | no |
-| `line_bindings:read` | yes | yes | no | no |
-| `line_bindings:approve` | yes | yes | no | no |
-| `line_bindings:reject` | yes | yes | no | no |
 | `announcements:draft` | yes | yes | yes | no |
 | `announcements:publish` | yes | yes | yes | no |
-| `announcements:notify_line` | yes | yes | yes | no |
-| `critical_notifications:send` | yes | yes | no | no |
 | `parcels:receive` | yes | yes | yes | yes |
 | `parcels:pickup` | yes | yes | yes | yes |
 | `parcels:read` | yes | yes | yes | yes |
 | `imports:run` | yes | yes | no | no |
 | `imports:apply_deactivation` | yes | yes | no | no |
 | `staff:manage` | yes | no | no | no |
-| `line_settings:manage` | yes | no | no | no |
 | `condo_settings:manage` | yes | no | no | no |
 
-- Security Staff may receive a `grant` override for
-  `critical_notifications:send`, but server-side scope validation still limits
-  Security-sent critical messages to all Condo, Building, or Floor scopes.
+- v1.1 adds `line_bindings:*`, `announcements:notify_line`,
+  `critical_notifications:send`, and `line_settings:manage` to the effective
+  permission model for Condos with LINE/LIFF entitlement.
+- Security Staff may receive a v1.1 `grant` override for
+  `critical_notifications:send`, but server-side scope validation must still
+  limit Security-sent critical messages to all Condo, Building, or Floor scopes.
 - A `deny` override removes a permission even when the preset grants it.
 
 ## Tenant Lease And Move-Out Contract
 
 - `unit_residents` is the resident-to-unit access relationship. `lease_agreements`
   is the tenant contract history for that relationship.
-- v1 supports one active tenant lease per Unit. Multi-tenant lease participants
+- v1.0 supports one active tenant lease per Unit. Multi-tenant lease participants
   and shared leases are post-v1.
 - Activating a new tenant lease is blocked when the Unit already has an active
   tenant lease or an active tenant `unit_residents` row tied to a previous lease.
   Owner and family `unit_residents` rows do not block tenant lease activation.
 - Resident import creates or updates `residents` and `unit_residents` only. It
-  does not create lease rows in v1. Staff must create and activate a lease from
-  the admin workflow before lease-gated tenant access is enforced for that Unit.
+  does not create lease rows in v1.0. Staff must create and activate a lease from
+  the admin workflow before tenant turnover safeguards are enforced for that Unit.
 - For existing pilot or imported tenant data, a Condo may enable lease-gated LIFF
-  access only after staff backfills active lease rows for active tenant
+  access in v1.1 only after staff backfills active lease rows for active tenant
   `unit_residents`. Until that Condo-level lease workflow is enabled, imported
-  tenants keep the existing active `line_bindings + unit_residents` LIFF behavior.
-- v1 does not automatically end leases or revoke tenant access when `ends_at`
+  tenants keep the existing active `unit_residents` behavior; after v1.1 ships,
+  LINE/LIFF access additionally depends on active `line_bindings`.
+- v1.0 does not automatically end leases or revoke tenant access when `ends_at`
   passes. Staff must explicitly close the lease or confirm move-out through a
   backend function.
 - `staff_close_tenant_move_out` closes the move-out lifecycle in one transaction:
   confirms the checklist, sets the lease to `ended` or `terminated`, ends the
-  tenant `unit_residents` row, revokes active tenant `line_bindings`, and writes
-  audit events.
-- New tenant LINE binding for a Unit is blocked while that Unit still has an
-  active tenant lease or active tenant `unit_residents` row tied to the previous
-  lease. Owner and family access must not be revoked by tenant move-out.
+  tenant `unit_residents` row, revokes active tenant `line_bindings` when v1.1
+  LINE/LIFF is enabled, and writes audit events.
+- New tenant LINE binding for a Unit is blocked in v1.1 while that Unit still has
+  an active tenant lease or active tenant `unit_residents` row tied to the
+  previous lease. Owner and family access must not be revoked by tenant move-out.
 
 ## Staff/Admin Auth Contract
 
@@ -576,12 +673,12 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 - The login helper resolves `username -> internal_email`, then signs in with
   Supabase Auth email/password.
 - The internal email is not displayed in the product UI.
-- Username changes are post-v1 unless explicitly implemented with audit and
+- Username changes are post-v1.0 unless explicitly implemented with audit and
   internal email remapping.
 - Condo Admin password reset is a staff-management action that sets or invites a
-  new Supabase Auth password. There is no self-service staff password reset in v1.
+  new Supabase Auth password. There is no self-service staff password reset in v1.0.
 
-## LIFF And LINE Binding Contract
+## v1.1 LIFF And LINE Binding Contract
 
 - LIFF requests submit a LINE ID token or access token to an Edge Function.
 - The Edge Function verifies the token with LINE, resolves `line_user_id`, resolves
@@ -606,9 +703,9 @@ All customer-owned data tables include `id uuid primary key`, `created_at`,
 - Duplicate active binding for the same `line_user_id + line_channel_id + condo_id`
   and a different Resident is hard-blocked.
 
-## LINE Webhook Contract
+## v1.1 LINE Webhook Contract
 
-- `line_webhook_ingest` is the only public LINE webhook endpoint in v1.
+- `line_webhook_ingest` is the only public LINE webhook endpoint in v1.1.
 - The webhook verifies the LINE signature before reading or persisting event data.
 - The webhook resolves the receiving `line_channel_id` from the configured route or
   channel secret, then records an idempotent `line_webhook_events` row.
@@ -654,11 +751,11 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
 `validation_failed`, `conflict`, `rate_limited`, `provider_error`,
 `outcome_unknown`.
 
-### Required v1 Functions
+### Required v1.0 Functions
 
 - `platform_create_condo`: create or attach Organization, create Condo defaults,
-  seed first Condo Admin, attach Shared LINE channel, and write audit; platform
-  actor/service-role only.
+  seed first Condo Admin, apply package defaults, and write audit;
+  platform actor/service-role only.
 - `platform_activate_condo`: validate onboarding checks and set `active_at`;
   requires platform actor or an active Condo Admin membership with
   `condo_settings:manage` for that Condo.
@@ -681,9 +778,20 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
 - `staff_review_move_out_checklist`: update move-out checklist statuses, note, and
   evidence; requires `move_out_checklists:review`; writes audit.
 - `staff_close_tenant_move_out`: confirm checklist, end lease, end tenant Unit
-  Resident, revoke tenant LINE Binding, and write audit in one transaction;
-  requires `move_out_checklists:confirm`, `leases:end`, and
-  `tenant_access:revoke`.
+  Resident, revoke tenant LINE Binding when v1.1 LINE/LIFF is enabled, and write
+  audit in one transaction; requires `move_out_checklists:confirm`, `leases:end`,
+  and `tenant_access:revoke`.
+- `staff_receive_parcel`: create parcel; requires `parcels:receive`; optionally
+  stores photo.
+- `staff_pickup_parcel`: mark pickup; requires `parcels:pickup`; writes audit.
+- `staff_publish_announcement`: snapshot recipients and publish inside the
+  backoffice; requires publish permissions.
+- `import_validate`: validate uploaded CSV and generate diff rows.
+- `import_apply`: apply selected add/change/deactivation rows; requires
+  `imports:run` and `imports:apply_deactivation` for deactivation rows.
+
+### v1.1 LINE And LIFF Functions
+
 - `liff_resolve_contexts`: input LINE token and optional selected context; output
   active Condo/Unit contexts.
 - `liff_bind_line`: input LINE token, condo deep-link context, unit identifier,
@@ -692,22 +800,18 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
   `line_bindings:approve` or `line_bindings:reject`; writes audit.
 - `line_webhook_ingest`: verify LINE signature, persist/dedupe inbound event,
   route reply-capable workflows, and update reachable state when applicable.
-- `staff_receive_parcel`: create parcel; requires `parcels:receive`; optionally
-  stores photo and enqueues notification according to Condo parcel settings.
-- `staff_pickup_parcel`: mark pickup; requires `parcels:pickup`; writes audit.
 - `liff_list_parcels`: list Parcels for selected active Unit context.
-- `staff_publish_announcement`: snapshot recipients, publish, and optionally
-  enqueue LINE notification; requires publish/notify permissions.
-- `import_validate`: validate uploaded CSV and generate diff rows.
-- `import_apply`: apply selected add/change/deactivation rows; requires
-  `imports:run` and `imports:apply_deactivation` for deactivation rows.
-- `notification_worker_tick`: scheduled worker that locks queued jobs, dispatches
-  LINE requests, classifies outcomes, updates quota-enforcement counters when
-  needed, and schedules retries. It must not update `platform_usage_daily`.
+- `staff_publish_announcement` v1.1 extension: optionally enqueue LINE
+  notification; requires `announcements:notify_line` or
+  `critical_notifications:send`.
+- `notification_worker_tick`: scheduled worker that locks queued LINE jobs,
+  dispatches LINE requests, classifies outcomes, updates quota-enforcement
+  counters when needed, and schedules retries. It must not update
+  `platform_usage_daily`.
 - `notification_resend`: manual resend for authorized operators when a delivery is
   retryable or `outcome_unknown`.
 
-### v1.1 Maintenance And Cleaning Functions
+### v1.2 Maintenance And Cleaning Functions
 
 - `staff_assign_maintenance_request`: assign a submitted or acknowledged
   Maintenance Request to a Technician or Housekeeping Staff membership; requires
@@ -732,7 +836,7 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
 - `liff_list_maintenance_requests`: list resident-visible Maintenance Requests
   and status history for the selected active Unit context.
 
-### v1.2 Resident Billing Functions
+### v1.3 Resident Billing Functions
 
 - `billing_create_cycle`: create a Condo billing cycle; requires
   `billing_cycles:write`; writes audit.
@@ -756,18 +860,18 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
   matches the server-derived active `condo_id`, `unit_id`,
   `tenant_unit_resident_id`, and `lease_agreement_id`.
 
-### v1.2 Resident Billing Behavior
+### v1.3 Resident Billing Behavior
 
 - Invoice lifecycle is `draft` -> `issued` -> `partially_paid`, `paid`,
   `overdue`, or `void`.
 - Draft invoices have no `invoice_no`, do not send LINE notifications, and are
   not treated as collectible receivables.
-- If a Unit changes tenant during a billing cycle, v1.2 creates separate
+- If a Unit changes tenant during a billing cycle, v1.3 creates separate
   invoices per `lease_agreement_id`.
 - Monthly rent is prorated by the number of days the lease overlaps the billing
   cycle. Daily rent uses the overlapping day count directly.
 - Water and electricity items are calculated from persisted meter readings plus
-  the v1 billing utility settings. They are no longer preview-only in v1.2.
+  the v1.0 billing utility settings. They are no longer preview-only in v1.3.
 - Late fees apply only to `issued` or `partially_paid` invoices with
   `balance_amount > 0` after `due_at`.
 - Move-out blocks new normal-cycle invoices for the closed lease. Staff may issue
@@ -776,7 +880,7 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
   Invoices for closed leases are staff/back-office only until a separate
   post-move-out collection channel is defined.
 
-## Notification Delivery Contract
+## v1.1 LINE Notification Delivery Contract
 
 - Prefer LINE reply when the request has a valid reply token and the workflow can
   answer inside the active interaction.
@@ -786,14 +890,14 @@ Required error codes: `unauthenticated`, `permission_denied`, `not_found`,
   maintenance ships, and small announcements under 20 recipients.
 - Use multicast for normal/broadcast announcements with 20 or more recipients,
   batch max 500 recipients.
-- In v1, the notification worker supports Parcel and Announcement notification
-  jobs. Billing notification jobs for rent, water, electricity, due-date
-  reminders, and overdue reminders are outside v1.
-- Resident Billing v1.2 may add billing notification jobs for `invoice_issued`,
+- In v1.1, the notification worker supports Parcel and Announcement LINE
+  notification jobs. Billing notification jobs for rent, water, electricity,
+  due-date reminders, and overdue reminders are outside v1.1.
+- Resident Billing v1.3 may add billing notification jobs for `invoice_issued`,
   `due_soon`, and `overdue`, but those jobs must reuse the notification queue,
   LINE Binding, quota, and LIFF access rules. They must not send to revoked
   bindings or closed lease contexts.
-- Do not use LINE broadcast in SaaS v1; all recipients come from platform snapshots.
+- Do not use LINE broadcast in SaaS v1.1; all recipients come from platform snapshots.
 - Shared OA messages must include Condo context in the message text.
 - Critical notifications may bypass Condo soft limits but never provider limits,
   platform hard caps, audit, confirmation, or role/Condo rate limits.
@@ -861,9 +965,9 @@ Required columns: `building`, `unit_no`, `resident_name`, `phone`,
 - Phone numbers are normalized before matching. Thai local and international
   formats must compare consistently.
 - Resident import cannot apply a row that references an unknown Building/Unit.
-- Resident matching key in v1 is `organization_id + normalized_phone` when phone
+- Resident matching key in v1.0 is `organization_id + normalized_phone` when phone
   is present; ambiguous or missing phone requires manual review instead of merge.
-- Resident import does not create lease agreements in v1. Tenant lease creation is
+- Resident import does not create lease agreements in v1.0. Tenant lease creation is
   a staff workflow after the tenant Unit Resident exists.
 
 ### Diff And Apply Rules
@@ -906,11 +1010,12 @@ Required audited actions:
   revoke, including before/after access state and uploaded evidence paths.
 - Staff permission grant/deny and preset role assignment changes.
 - Import apply, stale override, and deactivation confirmation.
-- Resident or Unit Resident deactivation and LINE Binding impact summary.
+- Resident or Unit Resident deactivation and LINE Binding impact summary when
+  v1.1 LINE/LIFF is enabled.
 - Parcel pickup, including pickup name/note/photo path when present.
 - Maintenance Request setting changes, assignment, accept/start/resolve, uploaded
   evidence, and close.
-- Resident Billing v1.2 actions: billing cycle create/cancel, meter reading
+- Resident Billing v1.3 actions: billing cycle create/cancel, meter reading
   create/update, draft generation, invoice issue, invoice void, invoice
   adjustment, invoice number allocation, and manual payment record.
 
@@ -922,50 +1027,51 @@ Required audited actions:
   `platform_super_admin` claim, and deny stale tokens after platform access
   revocation.
 - Suspended or cancelled Organization/Condo access blocks staff operational writes
-  and LINE enqueue paths while preserving authorized reads and platform recovery
-  actions.
+  while preserving authorized reads and platform recovery actions. v1.1 extends
+  this to LINE enqueue paths.
 - Operational write enforcement uses runtime platform access flags, not joins to
   `tenant_subscriptions`.
 - `platform_aggregate_usage_tick` upserts idempotent usage snapshots and can run
   repeatedly without double counting or row-locking high-volume delivery loops.
 - Frontend route bypass is blocked backend-side.
-- `/liff` revoked binding, inactive Unit Resident, invalid selected context, and
-  missing context cannot read customer data.
-- Tenant LIFF access in a Condo with lease-gated access enabled requires active
-  binding, active tenant Unit Resident, active lease for the same Unit Resident,
-  and no confirmed move-out revoke.
-- Imported tenant data keeps existing LIFF behavior until lease rows are
+- v1.1 `/liff` revoked binding, inactive Unit Resident, invalid selected context,
+  and missing context cannot read customer data.
+- v1.1 tenant LIFF access in a Condo with lease-gated access enabled requires
+  active binding, active tenant Unit Resident, active lease for the same Unit
+  Resident, and no confirmed move-out revoke.
+- v1.1 imported tenant data keeps existing LIFF behavior until lease rows are
   backfilled and lease-gated access is enabled for that Condo.
-- Multi-Condo or multi-Unit Residents receive a context list and must select
+- v1.1 multi-Condo or multi-Unit Residents receive a context list and must select
   context before Unit-scoped workflows.
 - Multi-site owner/HQ behavior is covered at the model boundary by one
   Organization containing multiple Condos/properties/branches and each Condo
-  containing multiple Buildings. If the Owner/HQ dashboard is implemented in v1,
+  containing multiple Buildings. If the Owner/HQ dashboard is implemented in v1.0,
   tests must verify Organization-level overview first, explicit Condo/property/
   branch selection before site-scoped operations, and no privilege leakage into
   Platform Super Admin or resident `owner` behavior.
 - Staff/admin username is globally unique; login resolves internal email; Condo
   Admin reset works; self-service reset is unavailable in v1.
-- Bootstrap seeds Shared LINE, protected presets, first Condo Admin, default
-  notification settings, and activation checks.
+- Bootstrap seeds protected presets, package defaults, first Condo Admin, required
+  settings, and activation checks. v1.1 bootstrap additionally seeds Shared LINE
+  and LINE quota defaults.
 - Permission matrix matches the preset table; `deny` override wins over `grant`,
   and hidden nav is not treated as authorization.
 - Lease permission tests cover Admin/Manager full access, Juristic read/review
   only, and Security denied by default.
 - Tenant move-out close is transactional: lease ended, tenant Unit Resident ended,
-  tenant LINE Binding revoked, and audit written together. `ends_at` alone never
-  revokes access.
+  v1.1 tenant LINE Binding revoked when present, and audit written together.
+  `ends_at` alone never revokes access.
 - Active tenant lease uniqueness blocks overlapping active leases for one Unit,
   while owner and family access remains unaffected.
-- LINE binding covers exact unit+phone auto-bind, name-only review, ambiguous
+- v1.1 LINE binding covers exact unit+phone auto-bind, name-only review, ambiguous
   phone review, inactive reject, duplicate same-Condo hard block, and multi-Condo
   same-LINE allow.
-- LINE webhook verifies signature, dedupes events, accepts unexpired reply tokens
+- v1.1 LINE webhook verifies signature, dedupes events, accepts unexpired reply tokens
   only for the same channel/user, and updates blocked/unreachable bindings.
 - Import covers unknown Unit block, scoped diff, partial import warning, stale CSV
   conflict block using import baseline fields, explicit stale override with audit,
   idempotent retry, and deactivation impact confirmation.
-- Notification covers reply preference, Parcel recipient settings, multicast
+- v1.1 LINE notification covers reply preference, Parcel recipient settings, multicast
   `sent_assumed`, individual push `sent_confirmed`, blocked skip, provider
   retry classification, non-critical `outcome_unknown` manual resend, critical
   fallback/idempotency, and per-Condo quota.
@@ -975,33 +1081,37 @@ Required audited actions:
   precedence, `grace_days = 0`, nullable `max_fee_amount`, and the absence of
   invoice creation, meter-reading persistence, persisted charges, late-fee
   accrual, partial payment, payment allocation, and billing LINE jobs.
-- v1.1 Maintenance Request tests cover Technician and Housekeeping Staff preset
+- v1.2 Maintenance Request tests cover Technician and Housekeeping Staff preset
   defaults, assigned-only visibility, request-type restrictions, and Security
   denied by default.
-- v1.1 Maintenance Request evidence tests cover required-photo rejection when
+- v1.2 Maintenance Request evidence tests cover required-photo rejection when
   enabled, optional-photo success when disabled, per-Condo setting isolation, and
   `maintenance_request_settings:manage` enforcement.
-- v1.1 Maintenance Request lifecycle tests cover assign, accept, start, resolve,
+- v1.2 Maintenance Request lifecycle tests cover assign, accept, start, resolve,
   close, audit events, resident-visible status history, and internal staff notes
   hidden from residents.
-- Resident Billing v1.2 tests cover invoice generation only when a matching
+- Resident Billing v1.3 tests cover invoice generation only when a matching
   `lease_agreement_id` exists; generation from only `unit_id` or `resident_id` is
   blocked.
-- Resident Billing v1.2 tests cover a mid-cycle tenant change by creating
+- Resident Billing v1.3 tests cover a mid-cycle tenant change by creating
   separate invoices per lease and prorating rent by lease overlap days.
-- Resident Billing v1.2 tests cover atomic invoice numbers:
+- Resident Billing v1.3 tests cover atomic invoice numbers:
   `INV-{YYYYMM}-{running_no}` from `billing_cycles.period_yyyymm`, unique per
   Condo, duplicate-safe under concurrent issue, and draft invoices without
   `invoice_no`.
-- Resident Billing v1.2 tests cover LIFF isolation: a moved-out tenant with
+- Resident Billing v1.3 tests cover LIFF isolation: a moved-out tenant with
   revoked LINE Binding cannot see old Unit invoices, and a new tenant cannot see
   the prior tenant's invoice for the same Unit.
-- Resident Billing v1.2 tests cover billing notification targeting only active
+- Resident Billing v1.3 tests cover billing notification targeting only active
   allowed LIFF contexts, manual payment balance updates, voided invoice exclusion
   from receivables, and overdue transitions only for issued/partially-paid
   invoices with positive balance.
 - Storage covers unauthorized media read denial, signed URL generation after
   authorization, invalid MIME rejection, and oversized file rejection.
-- Vertical validation slice passes end to end: create Condo, import data, bind
-  LINE, receive Parcel, enqueue notification, deliver or record skip/failure, and
-  read Parcel from LIFF under the selected Unit context.
+- v1.0 vertical validation slice passes end to end: create Condo, import data,
+  configure staff/permissions/package state, receive and pick up Parcel, publish
+  Announcement with recipient snapshot, verify audit/history, and confirm billing
+  settings remain configuration-only.
+- v1.1 vertical validation slice extends v1.0 with LINE: bind LINE, enqueue
+  parcel/announcement notification, deliver or record skip/failure, and read
+  Parcel from LIFF under the selected Unit context.
