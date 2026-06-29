@@ -1,0 +1,1497 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Buri Platform Control Plane</title>
+    <style>
+      :root {
+        --primary-600: #3776da;
+        --primary-500: #5598ee;
+        --primary-400: #6aacf7;
+        --primary-300: #8dc4fa;
+        --primary-100: #eaf5ff;
+        --lime-500: #addb7b;
+        --lime-400: #d1e76d;
+        --navy-900: #071e42;
+        --soft-sky: #edf4fc;
+        --white: #ffffff;
+        --success: #8dd85f;
+        --warning: #f6b84b;
+        --danger: #ef5b5b;
+        --neutral: #eef3f8;
+        --border: #e1eefb;
+        --muted: #617391;
+        --gradient-primary: linear-gradient(135deg, #8dc4fa 0%, #5598ee 45%, #3776da 100%);
+        --gradient-soft: linear-gradient(135deg, #edf4fc 0%, #eaf5ff 100%);
+        --gradient-success: linear-gradient(135deg, #d1e76d 0%, #addb7b 100%);
+        --shadow-card: 0 16px 40px rgba(7, 30, 66, 0.08);
+        --shadow-soft: 0 18px 50px rgba(55, 118, 218, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--gradient-soft);
+        color: var(--navy-900);
+        font-family:
+          Inter,
+          "Noto Sans Thai",
+          "LINE Seed Sans TH",
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        letter-spacing: 0;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .app-shell {
+        display: grid;
+        grid-template-columns: 256px minmax(0, 1fr);
+        min-height: 100vh;
+        padding: 10px;
+        gap: 0;
+      }
+
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        min-height: calc(100vh - 20px);
+        padding: 22px 18px;
+        border: 1px solid rgba(225, 238, 251, 0.86);
+        border-radius: 28px 0 0 28px;
+        background: rgba(255, 255, 255, 0.68);
+        box-shadow: 12px 0 40px rgba(7, 30, 66, 0.06);
+        backdrop-filter: blur(18px);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 30px;
+      }
+
+      .brand img {
+        width: 66px;
+        height: 66px;
+        object-fit: contain;
+        border-radius: 22px;
+      }
+
+      .brand-name {
+        font-size: 31px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      .brand-subtitle {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .nav {
+        display: grid;
+        gap: 9px;
+      }
+
+      .nav-group-label {
+        margin: 23px 8px 8px;
+        color: #8798b4;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 54px;
+        padding: 0 12px;
+        border: 1px solid transparent;
+        border-radius: 18px;
+        color: var(--navy-900);
+        text-decoration: none;
+        font-size: 15px;
+        font-weight: 650;
+      }
+
+      .nav-item svg {
+        width: 22px;
+        height: 22px;
+        flex: 0 0 auto;
+        stroke-width: 2.2;
+      }
+
+      .nav-item.active {
+        background: var(--primary-100);
+        border-color: #d8e8fa;
+        color: #0968e7;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.84);
+      }
+
+      .nav-item.deferred {
+        color: #8ca0bd;
+      }
+
+      .pill-small {
+        margin-left: auto;
+        border: 1px solid #d9e7f8;
+        border-radius: 999px;
+        padding: 4px 8px;
+        background: #f8fbff;
+        color: #8ca0bd;
+        font-size: 10px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .admin-card {
+        margin-top: auto;
+        display: grid;
+        grid-template-columns: 50px minmax(0, 1fr) 18px;
+        gap: 10px;
+        align-items: center;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.74);
+        box-shadow: var(--shadow-card);
+      }
+
+      .admin-card img {
+        width: 50px;
+        height: 50px;
+        border-radius: 16px;
+        object-fit: cover;
+      }
+
+      .admin-name {
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      .admin-role {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .online {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+        color: #168f31;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .online::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: #3ac852;
+      }
+
+      .main {
+        min-width: 0;
+        border: 1px solid rgba(225, 238, 251, 0.92);
+        border-left: 0;
+        border-radius: 0 28px 28px 0;
+        background: rgba(255, 255, 255, 0.84);
+        box-shadow: var(--shadow-soft);
+        overflow: hidden;
+      }
+
+      .content {
+        padding: 22px 28px 24px;
+        max-width: 1560px;
+        margin: 0 auto;
+      }
+
+      .topbar {
+        display: grid;
+        grid-template-columns: 282px 236px 190px;
+        gap: 12px;
+        align-items: center;
+        justify-content: end;
+        margin-bottom: -4px;
+      }
+
+      .input-shell,
+      .select-shell {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 48px;
+        border: 1px solid #d8e8fa;
+        border-radius: 14px;
+        background: var(--white);
+        padding: 0 16px;
+        box-shadow: 0 8px 22px rgba(7, 30, 66, 0.05);
+      }
+
+      .input-shell input,
+      .select-shell select {
+        min-width: 0;
+        width: 100%;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--navy-900);
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .icon {
+        width: 20px;
+        height: 20px;
+        flex: 0 0 auto;
+      }
+
+      .primary-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        height: 48px;
+        border: 0;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #5598ee, #3776da);
+        color: var(--white);
+        font-size: 15px;
+        font-weight: 800;
+        box-shadow: 0 12px 24px rgba(55, 118, 218, 0.24);
+      }
+
+      .title-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        align-items: flex-start;
+        margin-bottom: 16px;
+      }
+
+      .breadcrumb {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 7px;
+        color: #8798b4;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .breadcrumb strong {
+        color: #0968e7;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 33px;
+        line-height: 1.06;
+        font-weight: 850;
+      }
+
+      .subtitle {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .title-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        justify-content: flex-end;
+        padding-top: 25px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 26px;
+        border-radius: 999px;
+        padding: 5px 12px;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .badge.info {
+        background: #dfeeff;
+        color: #236ed8;
+      }
+
+      .badge.lime {
+        background: var(--gradient-success);
+        color: var(--navy-900);
+      }
+
+      .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        background: var(--white);
+        box-shadow: var(--shadow-card);
+      }
+
+      .kpi-card {
+        display: grid;
+        grid-template-columns: 48px minmax(0, 1fr) 72px;
+        gap: 12px;
+        align-items: center;
+        height: 102px;
+        min-height: 0;
+        padding: 14px;
+        overflow: hidden;
+      }
+
+      .kpi-card.disabled {
+        border-style: dashed;
+        background: linear-gradient(135deg, #ffffff 0%, #fbfdff 100%);
+        color: #97a6ba;
+      }
+
+      .kpi-icon {
+        display: grid;
+        place-items: center;
+        width: 48px;
+        height: 48px;
+        border-radius: 18px;
+        background: var(--primary-100);
+        color: #0968e7;
+      }
+
+      .kpi-icon.warning {
+        background: #fff2dd;
+        color: #f18700;
+      }
+
+      .kpi-icon.danger {
+        background: #ffe5ea;
+        color: #e02337;
+      }
+
+      .kpi-icon.gray {
+        background: var(--neutral);
+        color: #98a7ba;
+      }
+
+      .kpi-label {
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-weight: 800;
+      }
+
+      .kpi-value {
+        margin-top: 4px;
+        font-size: 28px;
+        line-height: 1;
+        font-weight: 850;
+      }
+
+      .kpi-change {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 8px;
+        color: #1f9e3c;
+        font-size: 10px;
+        white-space: nowrap;
+        font-weight: 750;
+      }
+
+      .kpi-change.bad {
+        color: #e02337;
+      }
+
+      .kpi-spark {
+        width: 72px;
+        height: 38px;
+      }
+
+      .section-card {
+        overflow: hidden;
+        margin-bottom: 8px;
+      }
+
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        padding: 12px 20px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      h2 {
+        font-size: 19px;
+        line-height: 1.1;
+        font-weight: 850;
+      }
+
+      .section-subtitle {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .secondary-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 34px;
+        border: 1px solid #cfe6ff;
+        border-radius: 12px;
+        background: #ffffff;
+        color: #0968e7;
+        padding: 0 14px;
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        min-width: 0;
+      }
+
+      th,
+      td {
+        padding: 8px 12px;
+        border-bottom: 1px solid #edf3fb;
+        text-align: left;
+        vertical-align: middle;
+        font-size: 10px;
+        line-height: 1.22;
+      }
+
+      th:nth-child(1),
+      td:nth-child(1) {
+        width: 15%;
+      }
+
+      th:nth-child(2),
+      td:nth-child(2) {
+        width: 13%;
+      }
+
+      th:nth-child(3),
+      td:nth-child(3) {
+        width: 8%;
+      }
+
+      th:nth-child(4),
+      td:nth-child(4),
+      th:nth-child(5),
+      td:nth-child(5) {
+        width: 5%;
+      }
+
+      th:nth-child(6),
+      td:nth-child(6),
+      th:nth-child(7),
+      td:nth-child(7) {
+        width: 10%;
+      }
+
+      th:nth-child(8),
+      td:nth-child(8) {
+        width: 14%;
+      }
+
+      th:nth-child(9),
+      td:nth-child(9) {
+        width: 10%;
+      }
+
+      th:nth-child(10),
+      td:nth-child(10) {
+        width: 10%;
+      }
+
+      th {
+        background: #f8fbff;
+        color: var(--navy-900);
+        font-weight: 850;
+      }
+
+      td {
+        color: #244064;
+        font-weight: 650;
+      }
+
+      td {
+        height: 40px;
+      }
+
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .org-cell {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 850;
+        color: var(--navy-900);
+      }
+
+      .building-mark {
+        display: grid;
+        place-items: center;
+        width: 18px;
+        height: 18px;
+        color: #0968e7;
+      }
+
+      .contact {
+        display: grid;
+        gap: 1px;
+      }
+
+      .contact span:last-child,
+      .muted {
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        min-height: 20px;
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 10px;
+        font-weight: 850;
+      }
+
+      .status.active {
+        background: #efffee;
+        color: #168f31;
+      }
+
+      .status.trial {
+        background: #eaf5ff;
+        color: #0968e7;
+      }
+
+      .status.past {
+        background: #fff4e8;
+        color: #d66800;
+      }
+
+      .status.suspended {
+        background: #fff0f0;
+        color: #d94141;
+      }
+
+      .status.pending {
+        background: #f3edff;
+        color: #6d3fd1;
+      }
+
+      .status.blocked {
+        background: #eef3f8;
+        color: #52677a;
+      }
+
+      .row-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .icon-button {
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border: 1px solid #cfe6ff;
+        border-radius: 10px;
+        background: #ffffff;
+        color: #0968e7;
+      }
+
+      .bottom-grid {
+        display: grid;
+        grid-template-columns: minmax(372px, 1.06fr) minmax(390px, 1.14fr) minmax(340px, 1fr);
+        gap: 12px;
+        margin-top: 8px;
+      }
+
+      .panel {
+        padding: 18px 20px;
+        min-height: 258px;
+        overflow: hidden;
+      }
+
+      h3 {
+        font-size: 16px;
+        font-weight: 850;
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        align-items: start;
+        gap: 4px;
+        margin: 24px 0 14px;
+      }
+
+      .step {
+        display: grid;
+        justify-items: center;
+        gap: 8px;
+        position: relative;
+        text-align: center;
+      }
+
+      .step:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        top: 22px;
+        right: -50%;
+        width: 100%;
+        height: 2px;
+        background: #cfe6ff;
+        z-index: 0;
+      }
+
+      .step-dot {
+        display: grid;
+        place-items: center;
+        position: relative;
+        z-index: 1;
+        width: 44px;
+        height: 44px;
+        border-radius: 17px;
+        background: var(--gradient-primary);
+        color: var(--white);
+        box-shadow: 0 12px 24px rgba(55, 118, 218, 0.22);
+      }
+
+      .step:nth-child(4) .step-dot,
+      .step:nth-child(5) .step-dot {
+        background: #dcecff;
+        color: #0968e7;
+        box-shadow: none;
+      }
+
+      .step:last-child .step-dot {
+        background: var(--gradient-success);
+        color: var(--navy-900);
+      }
+
+      .step-number {
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      .step-label {
+        min-height: 30px;
+        color: #244064;
+        font-size: 10px;
+        line-height: 1.25;
+        font-weight: 800;
+      }
+
+      .onboarding-footer {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-top: 10px;
+      }
+
+      .mascot-mini {
+        width: 94px;
+        height: 94px;
+        object-fit: contain;
+        filter: drop-shadow(0 18px 22px rgba(55, 118, 218, 0.16));
+      }
+
+      .action-list {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .action-row {
+        display: grid;
+        grid-template-columns: 36px minmax(0, 1fr) 86px 88px;
+        gap: 12px;
+        align-items: center;
+        min-height: 42px;
+        padding: 7px 10px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: #fbfdff;
+      }
+
+      .action-icon {
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+        background: var(--gradient-success);
+        color: var(--navy-900);
+      }
+
+      .action-icon.warn {
+        background: #fff2dd;
+        color: #f18700;
+      }
+
+      .action-title {
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      .action-meta,
+      .action-actor {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 650;
+      }
+
+      .notes {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .note {
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        padding: 9px 10px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: #ffffff;
+      }
+
+      .note-icon {
+        display: grid;
+        place-items: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 14px;
+        background: var(--primary-100);
+        color: #0968e7;
+      }
+
+      .note-icon.green {
+        background: #efffee;
+        color: #168f31;
+      }
+
+      .note-title {
+        font-size: 11px;
+        font-weight: 850;
+      }
+
+      .note-copy {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 650;
+      }
+
+      .doc-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 14px;
+        color: #0968e7;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 850;
+      }
+
+      @media (max-width: 1180px) {
+        .app-shell {
+          grid-template-columns: 1fr;
+          padding: 0;
+        }
+
+        .sidebar {
+          min-height: auto;
+          border-radius: 0;
+          padding: 18px;
+        }
+
+        .brand {
+          margin-bottom: 16px;
+        }
+
+        .nav {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .nav-group-label {
+          grid-column: 1 / -1;
+        }
+
+        .admin-card {
+          margin-top: 18px;
+        }
+
+        .main {
+          border-left: 1px solid rgba(225, 238, 251, 0.92);
+          border-radius: 0;
+        }
+
+        .topbar,
+        .kpi-grid,
+        .bottom-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .title-row {
+          flex-direction: column;
+        }
+
+        .title-badges {
+          justify-content: flex-start;
+          padding-top: 0;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .content {
+          padding: 18px;
+        }
+
+        .nav,
+        .topbar,
+        .kpi-grid,
+        .bottom-grid {
+          grid-template-columns: 1fr;
+        }
+
+        h1 {
+          font-size: 28px;
+        }
+
+        .kpi-card {
+          grid-template-columns: 54px minmax(0, 1fr);
+        }
+
+        .kpi-spark {
+          display: none;
+        }
+
+        .steps {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .step::after {
+          display: none;
+        }
+
+        .action-row {
+          grid-template-columns: 36px minmax(0, 1fr);
+        }
+
+        .action-meta,
+        .action-actor {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Platform navigation">
+        <div class="brand">
+          <img src="./buri-logo.png" alt="Buri logo" />
+          <div>
+            <div class="brand-name">Buri</div>
+            <div class="brand-subtitle">Platform Control Plane</div>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <a class="nav-item active" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+            </svg>
+            Platform Overview
+          </a>
+          <a class="nav-item" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9.5" cy="7" r="4"></circle>
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            Organizations
+          </a>
+          <a class="nav-item" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+              <path d="M3 10h18"></path>
+              <path d="M7 15h4"></path>
+            </svg>
+            Subscriptions
+          </a>
+          <a class="nav-item" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+              <path d="M3 21h18"></path>
+              <path d="M6 21V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v17"></path>
+              <path d="M10 7h2M10 11h2M10 15h2"></path>
+              <circle cx="18" cy="16" r="3"></circle>
+              <path d="M18 14v4M16 16h4"></path>
+            </svg>
+            Onboarding / Create Condo
+          </a>
+
+          <div class="nav-group-label">Deferred</div>
+          <a class="nav-item deferred" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+              <path d="M3 3v18h18"></path>
+              <path d="M7 16V9"></path>
+              <path d="M12 16V5"></path>
+              <path d="M17 16v-4"></path>
+            </svg>
+            Usage & Quota
+            <span class="pill-small">Later</span>
+          </a>
+          <a class="nav-item deferred" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <path d="M14 2v6h6"></path>
+              <path d="M9 15h6"></path>
+              <path d="M9 11h2"></path>
+            </svg>
+            Audit Logs
+            <span class="pill-small">Later</span>
+          </a>
+          <a class="nav-item deferred" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M19 8v6"></path>
+              <path d="M22 11h-6"></path>
+            </svg>
+            Platform Admins
+            <span class="pill-small">Later</span>
+          </a>
+        </nav>
+
+        <div class="admin-card">
+          <img src="./buri-logo.png" alt="" />
+          <div>
+            <div class="admin-name">Super Admin</div>
+            <div class="admin-role">Platform Owner</div>
+            <div class="online">Online</div>
+          </div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path d="m6 9 6 6 6-6"></path>
+          </svg>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="content">
+          <div class="topbar">
+            <label class="input-shell">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+              </svg>
+              <input type="search" placeholder="Search organization, condo, owner..." />
+            </label>
+            <label class="select-shell">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+                <path d="M16 2v4M8 2v4M3 10h18"></path>
+              </svg>
+              <select aria-label="Date range">
+                <option>Last 30 days</option>
+                <option>This month</option>
+                <option>Last quarter</option>
+              </select>
+            </label>
+            <button class="primary-button">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                <path d="M12 5v14M5 12h14"></path>
+              </svg>
+              Create Condo
+            </button>
+          </div>
+
+          <section class="title-row">
+            <div>
+              <div class="breadcrumb"><strong>/admin</strong><span>/</span><span>platform</span></div>
+              <h1>Platform Overview</h1>
+              <p class="subtitle">Owner-only platform operations dashboard.</p>
+            </div>
+            <div class="title-badges">
+              <span class="badge info">v1.0</span>
+              <span class="badge lime">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M12 7v5l3 2"></path>
+                </svg>
+                Delayed usage metrics
+              </span>
+            </div>
+          </section>
+
+          <section class="kpi-grid" aria-label="Platform KPIs">
+            <article class="card kpi-card">
+              <div class="kpi-icon">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9.5" cy="7" r="4"></circle>
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="kpi-label">Active Organizations</div>
+                <div class="kpi-value">128</div>
+                <div class="kpi-change">up 12.4% vs prev 30 days</div>
+              </div>
+              <svg class="kpi-spark" viewBox="0 0 88 42" fill="none" aria-hidden="true">
+                <path d="M2 32c8 0 8-8 15-8s6 8 13 8 6-18 13-18 7 16 14 16 7-24 15-24 7 14 14 14" stroke="#3776DA" stroke-width="2.2" stroke-linecap="round"></path>
+              </svg>
+            </article>
+
+            <article class="card kpi-card">
+              <div class="kpi-icon">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <path d="M3 21h18"></path>
+                  <path d="M6 21V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v17"></path>
+                  <path d="M10 7h2M10 11h2M10 15h2"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="kpi-label">Active Condos / Properties</div>
+                <div class="kpi-value">312</div>
+                <div class="kpi-change">up 8.7% vs prev 30 days</div>
+              </div>
+              <svg class="kpi-spark" viewBox="0 0 88 42" fill="none" aria-hidden="true">
+                <path d="M2 31c7 0 7-5 14-5s7 7 14 7 7-19 14-19 7 16 14 16 7-26 14-26 7 8 14 8" stroke="#3776DA" stroke-width="2.2" stroke-linecap="round"></path>
+              </svg>
+            </article>
+
+            <article class="card kpi-card">
+              <div class="kpi-icon">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <path d="M4.5 16.5c-1.2-4 2.3-8.2 8.2-10.2L18.5 4l-2.3 5.8c-2 5.9-6.2 9.4-10.2 8.2z"></path>
+                  <path d="M9 15 4 20"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="kpi-label">Trialing</div>
+                <div class="kpi-value">24</div>
+                <div class="kpi-change">up 14.3% vs prev 30 days</div>
+              </div>
+              <svg class="kpi-spark" viewBox="0 0 88 42" fill="none" aria-hidden="true">
+                <path d="M2 33c8 0 7-4 14-4s7 7 14 7 6-19 14-19 7 13 14 13 7-24 14-24 7 12 14 12" stroke="#3776DA" stroke-width="2.2" stroke-linecap="round"></path>
+              </svg>
+            </article>
+
+            <article class="card kpi-card">
+              <div class="kpi-icon warning">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <path d="M12 9v4"></path>
+                  <path d="M12 17h.01"></path>
+                  <circle cx="12" cy="12" r="9"></circle>
+                </svg>
+              </div>
+              <div>
+                <div class="kpi-label">Past Due</div>
+                <div class="kpi-value">9</div>
+                <div class="kpi-change bad">up 12.5% vs prev 30 days</div>
+              </div>
+              <svg class="kpi-spark" viewBox="0 0 88 42" fill="none" aria-hidden="true">
+                <path d="M2 31c8 0 7 7 14 7s7-14 14-14 7-13 14-13 7 21 14 21 7-18 14-18 7 11 14 11" stroke="#F18700" stroke-width="2.2" stroke-linecap="round"></path>
+              </svg>
+            </article>
+
+            <article class="card kpi-card">
+              <div class="kpi-icon danger">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M10 8v8M14 8v8"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="kpi-label">Suspended</div>
+                <div class="kpi-value">6</div>
+                <div class="kpi-change bad">up 20.0% vs prev 30 days</div>
+              </div>
+              <svg class="kpi-spark" viewBox="0 0 88 42" fill="none" aria-hidden="true">
+                <path d="M2 30c7 0 7-3 14-3s7 4 14 4 7-11 14-11 7 9 14 9 7-15 14-15 7 7 14 7" stroke="#EF5B5B" stroke-width="2.2" stroke-linecap="round"></path>
+              </svg>
+            </article>
+
+            <article class="card kpi-card">
+              <div class="kpi-icon">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <path d="M6 2h12"></path>
+                  <path d="M6 22h12"></path>
+                  <path d="M8 2c0 5 8 5 8 10s-8 5-8 10"></path>
+                  <path d="M16 2c0 5-8 5-8 10s8 5 8 10"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="kpi-label">Pending Onboarding</div>
+                <div class="kpi-value">17</div>
+                <div class="kpi-change">down 5.6% vs prev 30 days</div>
+              </div>
+              <svg class="kpi-spark" viewBox="0 0 88 42" fill="none" aria-hidden="true">
+                <path d="M2 32c8 0 7-11 14-11s7 14 14 14 7-22 14-22 7 13 14 13 7-20 14-20 7 11 14 11" stroke="#3776DA" stroke-width="2.2" stroke-linecap="round"></path>
+              </svg>
+            </article>
+
+            <article class="card kpi-card">
+              <div class="kpi-icon">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <path d="m3 11 9-8 9 8"></path>
+                  <path d="M5 10v10h14V10"></path>
+                  <path d="M9 20v-6h6v6"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="kpi-label">Active Rooms</div>
+                <div class="kpi-value">8,742</div>
+                <div class="kpi-change">up 9.3% vs prev 30 days</div>
+              </div>
+              <svg class="kpi-spark" viewBox="0 0 88 42" fill="none" aria-hidden="true">
+                <path d="M2 31c8 0 7-9 14-9s7 9 14 9 7-17 14-17 7 13 14 13 7-23 14-23 7 15 14 15" stroke="#3776DA" stroke-width="2.2" stroke-linecap="round"></path>
+              </svg>
+            </article>
+
+            <article class="card kpi-card disabled">
+              <div class="kpi-icon gray">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+                  <path d="M8.5 16a6 6 0 0 1 7 0"></path>
+                  <path d="M12 20h.01"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="kpi-label">LINE Usage (v1.1+ / when enabled)</div>
+                <div class="kpi-value">--</div>
+                <div class="kpi-change muted">Not available in v1.0</div>
+              </div>
+              <svg class="kpi-spark" viewBox="0 0 88 42" fill="none" aria-hidden="true">
+                <path d="M2 32c8 0 7-6 14-6s7 8 14 8 7-15 14-15 7 11 14 11 7-20 14-20 7 11 14 11" stroke="#A9B7CA" stroke-width="2.2" stroke-dasharray="4 5" stroke-linecap="round"></path>
+              </svg>
+            </article>
+          </section>
+
+          <section class="card section-card">
+            <div class="section-header">
+              <div>
+                <h2>Tenant Health</h2>
+                <p class="section-subtitle">Delayed usage snapshot and tenant access health.</p>
+              </div>
+              <button class="secondary-button">View all</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Organization</th>
+                    <th>Owner / Contact</th>
+                    <th>Plan</th>
+                    <th>Condos</th>
+                    <th>Rooms</th>
+                    <th>Subscription Status</th>
+                    <th>Platform Access Status</th>
+                    <th>Latest Delayed Usage Snapshot</th>
+                    <th>Last Activity</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><div class="org-cell"><span class="building-mark">▦</span>Greenview Residences</div></td>
+                    <td><div class="contact"><span>Alice Tan</span><span>alice@greenview.sg</span></div></td>
+                    <td><span class="status trial">Business</span></td>
+                    <td>3</td>
+                    <td>842</td>
+                    <td><span class="status active">Active</span></td>
+                    <td><span class="status active">Active</span></td>
+                    <td>May 12, 2025 02:00<br /><span class="muted">(Delayed 24h)</span></td>
+                    <td>May 12, 2025<br />10:24 AM</td>
+                    <td><div class="row-actions"><button class="secondary-button">View</button><button class="icon-button" aria-label="More actions">⋮</button></div></td>
+                  </tr>
+                  <tr>
+                    <td><div class="org-cell"><span class="building-mark">▦</span>Lakeside Towers</div></td>
+                    <td><div class="contact"><span>Benjamin Lee</span><span>ben@lakesidetowers.com</span></div></td>
+                    <td><span class="status trial">Business</span></td>
+                    <td>5</td>
+                    <td>1,256</td>
+                    <td><span class="status active">Active</span></td>
+                    <td><span class="status active">Active</span></td>
+                    <td>May 12, 2025 02:00<br /><span class="muted">(Delayed 24h)</span></td>
+                    <td>May 12, 2025<br />09:18 AM</td>
+                    <td><div class="row-actions"><button class="secondary-button">View</button><button class="icon-button" aria-label="More actions">⋮</button></div></td>
+                  </tr>
+                  <tr>
+                    <td><div class="org-cell"><span class="building-mark">▦</span>Maple Grove Condo</div></td>
+                    <td><div class="contact"><span>Carol Wong</span><span>carol@maplegrove.com</span></div></td>
+                    <td><span class="status trial">Basic</span></td>
+                    <td>1</td>
+                    <td>168</td>
+                    <td><span class="status trial">Trialing</span></td>
+                    <td><span class="status active">Active</span></td>
+                    <td>May 12, 2025 02:00<br /><span class="muted">(Delayed 24h)</span></td>
+                    <td>May 12, 2025<br />08:05 AM</td>
+                    <td><div class="row-actions"><button class="secondary-button">View</button><button class="icon-button" aria-label="More actions">⋮</button></div></td>
+                  </tr>
+                  <tr>
+                    <td><div class="org-cell"><span class="building-mark">▦</span>Harbour Point Suites</div></td>
+                    <td><div class="contact"><span>Daniel Ng</span><span>daniel@harbourpoint.com</span></div></td>
+                    <td><span class="status trial">Business</span></td>
+                    <td>2</td>
+                    <td>612</td>
+                    <td><span class="status past">Past Due</span></td>
+                    <td><span class="status past">Restricted</span></td>
+                    <td>May 11, 2025 02:00<br /><span class="muted">(Delayed 48h)</span></td>
+                    <td>May 9, 2025<br />04:41 PM</td>
+                    <td><div class="row-actions"><button class="secondary-button">View</button><button class="icon-button" aria-label="More actions">⋮</button></div></td>
+                  </tr>
+                  <tr>
+                    <td><div class="org-cell"><span class="building-mark">▦</span>Sunrise Apartments</div></td>
+                    <td><div class="contact"><span>Emily Chen</span><span>emily@sunriseapts.com</span></div></td>
+                    <td><span class="status trial">Business</span></td>
+                    <td>2</td>
+                    <td>476</td>
+                    <td><span class="status suspended">Suspended</span></td>
+                    <td><span class="status suspended">Suspended</span></td>
+                    <td>May 10, 2025 02:00<br /><span class="muted">(Delayed 24h)</span></td>
+                    <td>May 6, 2025<br />11:12 AM</td>
+                    <td><div class="row-actions"><button class="secondary-button">View</button><button class="icon-button" aria-label="More actions">⋮</button></div></td>
+                  </tr>
+                  <tr>
+                    <td><div class="org-cell"><span class="building-mark">▦</span>Oakwood Heights</div></td>
+                    <td><div class="contact"><span>Farid Rahman</span><span>farid@oakwoodheights.com</span></div></td>
+                    <td><span class="status trial">Basic</span></td>
+                    <td>--</td>
+                    <td>--</td>
+                    <td><span class="status pending">Pending Onboarding</span></td>
+                    <td><span class="status blocked">No Access</span></td>
+                    <td>--</td>
+                    <td>May 11, 2025<br />02:17 PM</td>
+                    <td><div class="row-actions"><button class="secondary-button">View</button><button class="icon-button" aria-label="More actions">⋮</button></div></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="bottom-grid">
+            <article class="card panel">
+              <h3>Onboarding Pipeline</h3>
+              <p class="section-subtitle">Standard steps to onboard a new organization and condo.</p>
+              <div class="steps">
+                <div class="step">
+                  <div class="step-dot">1</div>
+                  <div class="step-number">1</div>
+                  <div class="step-label">Create Organization</div>
+                </div>
+                <div class="step">
+                  <div class="step-dot">2</div>
+                  <div class="step-number">2</div>
+                  <div class="step-label">Create Condo / Property</div>
+                </div>
+                <div class="step">
+                  <div class="step-dot">3</div>
+                  <div class="step-number">3</div>
+                  <div class="step-label">First Condo Admin</div>
+                </div>
+                <div class="step">
+                  <div class="step-dot">4</div>
+                  <div class="step-number">4</div>
+                  <div class="step-label">Import CSV</div>
+                </div>
+                <div class="step">
+                  <div class="step-dot">5</div>
+                  <div class="step-number">5</div>
+                  <div class="step-label">Review Settings</div>
+                </div>
+                <div class="step">
+                  <div class="step-dot">✓</div>
+                  <div class="step-number">6</div>
+                  <div class="step-label">Activate</div>
+                </div>
+              </div>
+              <div class="onboarding-footer">
+                <button class="secondary-button">
+                  Start Onboarding
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path d="m9 18 6-6-6-6"></path>
+                  </svg>
+                </button>
+                <img class="mascot-mini" src="./buri-logo.png" alt="" />
+              </div>
+            </article>
+
+            <article class="card panel">
+              <div class="section-header" style="padding: 0 0 12px; border-bottom: 0;">
+                <div>
+                  <h3>Recent Platform Actions</h3>
+                  <p class="section-subtitle">Latest owner-level operations.</p>
+                </div>
+                <button class="secondary-button">View all</button>
+              </div>
+              <div class="action-list">
+                <div class="action-row">
+                  <div class="action-icon">✓</div>
+                  <div>
+                    <div class="action-title">Changed plan to Business</div>
+                    <div class="action-meta">Greenview Residences</div>
+                  </div>
+                  <div class="action-meta">May 12, 2025<br />10:15 AM</div>
+                  <div class="action-actor">Super Admin</div>
+                </div>
+                <div class="action-row">
+                  <div class="action-icon warn">Ⅱ</div>
+                  <div>
+                    <div class="action-title">Suspended organization access</div>
+                    <div class="action-meta">Sunrise Apartments</div>
+                  </div>
+                  <div class="action-meta">May 11, 2025<br />04:30 PM</div>
+                  <div class="action-actor">Super Admin</div>
+                </div>
+                <div class="action-row">
+                  <div class="action-icon">▶</div>
+                  <div>
+                    <div class="action-title">Reactivated organization access</div>
+                    <div class="action-meta">Riverside Suites</div>
+                  </div>
+                  <div class="action-meta">May 10, 2025<br />11:02 AM</div>
+                  <div class="action-actor">Super Admin</div>
+                </div>
+                <div class="action-row">
+                  <div class="action-icon" style="background: var(--primary-100); color: #0968e7;">↺</div>
+                  <div>
+                    <div class="action-title">Extended trial by 7 days</div>
+                    <div class="action-meta">Maple Grove Condo</div>
+                  </div>
+                  <div class="action-meta">May 9, 2025<br />09:47 AM</div>
+                  <div class="action-actor">Super Admin</div>
+                </div>
+              </div>
+            </article>
+
+            <article class="card panel">
+              <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+                <div>
+                  <h3>Platform Notes</h3>
+                  <p class="section-subtitle">Operational reminders and guardrails.</p>
+                </div>
+                <img src="./buri-logo.png" alt="" style="width: 86px; height: 86px; object-fit: contain;" />
+              </div>
+              <div class="notes">
+                <div class="note">
+                  <div class="note-icon green">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                      <path d="m9 12 2 2 4-4"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="note-title">Sensitive actions require reason + audit</div>
+                    <div class="note-copy">All critical changes are audited and immutable.</div>
+                  </div>
+                </div>
+                <div class="note">
+                  <div class="note-icon">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9"></circle>
+                      <path d="M12 7v5l3 2"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="note-title">Usage data is delayed</div>
+                    <div class="note-copy">Usage snapshots are updated hourly/daily. Do not use for real-time decisions.</div>
+                  </div>
+                </div>
+                <div class="note">
+                  <div class="note-icon">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9"></circle>
+                      <path d="M12 16v-4"></path>
+                      <path d="M12 8h.01"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="note-title">Focus: Access & subscriptions</div>
+                    <div class="note-copy">This control plane manages SaaS access, not resident billing or runtime LINE behavior.</div>
+                  </div>
+                </div>
+              </div>
+              <a class="doc-link" href="../docs/v1-implementation-contract.md">
+                View Documentation
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <path d="M7 17 17 7"></path>
+                  <path d="M7 7h10v10"></path>
+                </svg>
+              </a>
+            </article>
+          </section>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>
